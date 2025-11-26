@@ -18,6 +18,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "baji-sdk"
 include ':sdk'
+include ':demo'
 
 // 引用现有项目的模块
 def electronicBadgePath = new File(settingsDir, '../electronic-badge').absolutePath

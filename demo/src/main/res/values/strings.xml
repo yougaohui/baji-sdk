@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">电子吧唧SDK Demo</string>
+    <string name="scan_devices">扫描设备</string>
+    <string name="stop_scan">停止扫描</string>
+    <string name="connect">连接</string>
+    <string name="disconnect">断开</string>
+    <string name="connected">已连接</string>
+    <string name="disconnected">未连接</string>
+    <string name="connecting">连接中...</string>
+    <string name="sync_image">同步图片</string>
+    <string name="sync_video">同步视频</string>
+    <string name="select_image">选择图片</string>
+    <string name="select_video">选择视频</string>
+    <string name="device_list">设备列表</string>
+    <string name="no_devices">未发现设备</string>
+    <string name="sync_success">同步成功</string>
+    <string name="sync_failed">同步失败</string>
+    <string name="sync_progress">同步进度: %1$d%%</string>
+</resources>
+
