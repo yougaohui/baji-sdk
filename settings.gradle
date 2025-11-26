@@ -1,0 +1,36 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        jcenter()
+        maven { url "https://jitpack.io" }
+    }
+}
+
+rootProject.name = "baji-sdk"
+include ':sdk'
+
+// 引用现有项目的模块
+def electronicBadgePath = new File(settingsDir, '../electronic-badge').absolutePath
+
+include ':baji-protocol'
+project(':baji-protocol').projectDir = new File(electronicBadgePath, 'baji-protocol')
+
+include ':ota-module'
+project(':ota-module').projectDir = new File(electronicBadgePath, 'ota-module')
+
+include ':network-module'
+project(':network-module').projectDir = new File(electronicBadgePath, 'network-module')
+
+include ':commonlib'
+project(':commonlib').projectDir = new File(electronicBadgePath, 'commonlib')
+
