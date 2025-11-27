@@ -1,8 +1,8 @@
 package com.baji.demo
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.BluetoothLeScanner
 import android.bluetooth.le.ScanCallback
@@ -19,26 +19,32 @@ import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.baji.demo.databinding.ActivityMainBinding
+import com.baji.demo.viewmodel.ImageSyncViewModel
 import com.baji.protocol.BroadcastSender
 import com.baji.protocol.event.BajiBaseEvent
 import com.baji.sdk.BajiSDK
 import com.baji.sdk.SDKConfig
-import com.baji.sdk.callback.*
+import com.baji.sdk.callback.ConnectionCallback
+import com.baji.sdk.callback.FileTransferCallback
+import com.baji.sdk.callback.ImageConvertCallback
+import com.baji.sdk.callback.VideoConvertCallback
 import com.baji.sdk.model.DeviceInfo
 import com.baji.sdk.model.FileInfo
 import com.baji.sdk.model.ImageConvertParams
 import com.baji.sdk.model.VideoConvertParams
 import com.baji.sdk.util.BluetoothFilterUtil
-import com.baji.demo.databinding.ActivityMainBinding
-import java.io.File
+import com.luck.picture.lib.PictureSelector
+import com.luck.picture.lib.config.PictureConfig
 import com.permissionx.guolindev.PermissionX
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     
@@ -47,6 +53,9 @@ class MainActivity : AppCompatActivity() {
     private val deviceList = mutableListOf<DeviceInfo>()
     private var connectedDevice: DeviceInfo? = null
     
+    // ViewModel
+    private lateinit var imageSyncViewModel: ImageSyncViewModel
+    
     // 蓝牙扫描相关
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothLeScanner: BluetoothLeScanner? = null
@@ -54,17 +63,7 @@ class MainActivity : AppCompatActivity() {
     private val scanHandler = Handler(Looper.getMainLooper())
     private val scanTimeoutMillis = 30000L // 30秒扫描超时
     
-    private val imagePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { syncImage(it) }
-    }
-    
-    private val videoPickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { syncVideo(it) }
-    }
+    // PictureSelector 使用 onActivityResult，不需要 launcher
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -79,6 +78,10 @@ class MainActivity : AppCompatActivity() {
         
         // 初始化SDK
         initSDK()
+        
+        // 初始化ViewModel
+        imageSyncViewModel = ViewModelProvider(this)[ImageSyncViewModel::class.java]
+        setupImageSyncViewModel()
         
         // 初始化UI
         initUI()
@@ -254,7 +257,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "请先连接设备", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            imagePickerLauncher.launch("image/*")
+            imageSyncViewModel.startPictureSelector(this)
         }
         
         // 同步视频按钮
@@ -263,7 +266,8 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "请先连接设备", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            videoPickerLauncher.launch("video/*")
+            // TODO: 实现视频选择功能
+            Toast.makeText(this, "视频同步功能待实现", Toast.LENGTH_SHORT).show()
         }
         
         updateConnectionStatus(false)
@@ -417,8 +421,25 @@ class MainActivity : AppCompatActivity() {
     
     private fun handleScanResult(result: ScanResult) {
         val device = result.device
-        val deviceName = device.name
-        val macAddress = device.address
+        // Android 12+需要权限才能访问设备名称和地址
+        val deviceName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                device.name
+            } else {
+                null
+            }
+        } else {
+            device.name
+        }
+        val macAddress = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                device.address
+            } else {
+                ""
+            }
+        } else {
+            device.address
+        }
         
         // 过滤掉无效的设备
         if (macAddress.isBlank()) {
@@ -500,17 +521,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun syncImage(uri: Uri) {
+    private fun syncImage(imagePath: String) {
         try {
-            // 将URI内容复制到临时文件
-            val tempFile = File(getExternalFilesDir(null), "temp_image_${System.currentTimeMillis()}.jpg")
-            contentResolver.openInputStream(uri)?.use { input ->
-                tempFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
+            val file = File(imagePath)
+            if (!file.exists()) {
+                Toast.makeText(this, "图片文件不存在", Toast.LENGTH_SHORT).show()
+                return
             }
             
-            val filePath = tempFile.absolutePath
+            val filePath = file.absolutePath
             
             // 转换图片（如果需要）
             val imageService = BajiSDK.getInstance().getImageConvertService()
@@ -607,6 +626,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    
+    /**
+     * 设置图片同步ViewModel的回调
+     */
+    private fun setupImageSyncViewModel() {
+        imageSyncViewModel.setFileTransferCallback(object : FileTransferCallback {
+            override fun onTransferStart() {
+                runOnUiThread {
+                    binding.syncProgress.visibility = View.VISIBLE
+                    binding.syncStatusText.text = getString(R.string.syncing)
+                }
+            }
+
+            override fun onTransferProgress(progress: Int, bytesTransferred: Long, totalBytes: Long) {
+                runOnUiThread {
+                    binding.syncStatusText.text = getString(R.string.syncing) + " ($progress%)"
+                }
+            }
+
+            override fun onTransferSuccess() {
+                runOnUiThread {
+                    binding.syncProgress.visibility = View.GONE
+                    binding.syncStatusText.text = getString(R.string.sync_success)
+                    Toast.makeText(this@MainActivity, getString(R.string.sync_success), Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onTransferFailed(error: String) {
+                runOnUiThread {
+                    binding.syncProgress.visibility = View.GONE
+                    binding.syncStatusText.text = getString(R.string.sync_failed) + ": $error"
+                    Toast.makeText(this@MainActivity, getString(R.string.sync_failed) + ": $error", Toast.LENGTH_SHORT).show()
+                }
+            }
+        })
+    }
+    
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        
+        if (resultCode == Activity.RESULT_OK) {
+            when (requestCode) {
+                PictureConfig.CHOOSE_REQUEST -> {
+                    // 处理PictureSelector返回的结果
+                    val result = PictureSelector.obtainMultipleResult(data)
+                    if (result.isNotEmpty()) {
+                        val localMedia = result[0]
+                        imageSyncViewModel.handlePictureSelectorResult(localMedia, this)
+                    }
+                }
+            }
+        }
+    }
     
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onEvent(event: Any) {

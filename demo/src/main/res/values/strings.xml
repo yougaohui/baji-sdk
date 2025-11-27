@@ -14,6 +14,7 @@
     <string name="select_video">选择视频</string>
     <string name="device_list">设备列表</string>
     <string name="no_devices">未发现设备</string>
+    <string name="syncing">同步中...</string>
     <string name="sync_success">同步成功</string>
     <string name="sync_failed">同步失败</string>
     <string name="sync_progress">同步进度: %1$d%%</string>
