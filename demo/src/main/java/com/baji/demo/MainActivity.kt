@@ -1,13 +1,27 @@
 package com.baji.demo
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.baji.protocol.BroadcastSender
 import com.baji.protocol.event.BajiBaseEvent
@@ -32,6 +46,13 @@ class MainActivity : AppCompatActivity() {
     private val deviceList = mutableListOf<DeviceInfo>()
     private var connectedDevice: DeviceInfo? = null
     
+    // 蓝牙扫描相关
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private var bluetoothLeScanner: BluetoothLeScanner? = null
+    private var isScanning = false
+    private val scanHandler = Handler(Looper.getMainLooper())
+    private val scanTimeoutMillis = 30000L // 30秒扫描超时
+    
     private val imagePickerLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -52,6 +73,9 @@ class MainActivity : AppCompatActivity() {
         // 注册EventBus
         EventBus.getDefault().register(this)
         
+        // 初始化蓝牙管理器
+        initBluetoothManager()
+        
         // 初始化SDK
         initSDK()
         
@@ -60,6 +84,17 @@ class MainActivity : AppCompatActivity() {
         
         // 请求权限
         requestPermissions()
+    }
+    
+    private fun initBluetoothManager() {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+        bluetoothAdapter = bluetoothManager?.adapter
+        bluetoothLeScanner = bluetoothAdapter?.bluetoothLeScanner
+        
+        if (bluetoothAdapter == null) {
+            Log.e(TAG, "设备不支持蓝牙")
+            Toast.makeText(this, "设备不支持蓝牙", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun initSDK() {
@@ -228,15 +263,185 @@ class MainActivity : AppCompatActivity() {
     }
     
     private fun startScan() {
+        // 检查蓝牙是否可用
+        if (!checkBluetoothAvailable()) {
+            if (bluetoothAdapter == null) {
+                Toast.makeText(this, "设备不支持蓝牙", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "请先开启蓝牙", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+        
+        // 检查权限
+        if (!checkBluetoothPermissions()) {
+            Toast.makeText(this, "需要蓝牙扫描权限", Toast.LENGTH_SHORT).show()
+            requestPermissions()
+            return
+        }
+        
+        // 如果正在扫描，先停止
+        if (isScanning) {
+            stopScan()
+            return
+        }
+        
+        // 清空设备列表
         deviceList.clear()
         deviceAdapter.notifyDataSetChanged()
-//        BajiSDK.getInstance().getBluetoothService().startScan()
+        
+        // 开始扫描
+        isScanning = true
         binding.scanButton.text = getString(R.string.stop_scan)
+        
+        try {
+            val scanSettings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build()
+            
+            val scanFilters = emptyList<ScanFilter>() // 不过滤，扫描所有设备
+            
+            if (bluetoothLeScanner != null) {
+                bluetoothLeScanner!!.startScan(scanFilters, scanSettings, scanCallback)
+                Log.d(TAG, "开始扫描蓝牙设备")
+                
+                // 设置扫描超时
+                scanHandler.postDelayed({
+                    if (isScanning) {
+                        stopScan()
+                        Toast.makeText(this, "扫描超时，已停止扫描", Toast.LENGTH_SHORT).show()
+                    }
+                }, scanTimeoutMillis)
+            } else {
+                Log.e(TAG, "BluetoothLeScanner不可用")
+                isScanning = false
+                binding.scanButton.text = getString(R.string.scan_devices)
+                Toast.makeText(this, "蓝牙扫描器不可用", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "扫描失败：权限不足", e)
+            isScanning = false
+            binding.scanButton.text = getString(R.string.scan_devices)
+            Toast.makeText(this, "扫描失败：权限不足", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "扫描失败：${e.message}", e)
+            isScanning = false
+            binding.scanButton.text = getString(R.string.scan_devices)
+            Toast.makeText(this, "扫描失败：${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun stopScan() {
-//        BajiSDK.getInstance().getBluetoothService().stopScan()
+        if (!isScanning) {
+            return
+        }
+        
+        isScanning = false
         binding.scanButton.text = getString(R.string.scan_devices)
+        
+        // 移除超时回调
+        scanHandler.removeCallbacksAndMessages(null)
+        
+        try {
+            if (bluetoothLeScanner != null && checkBluetoothPermissions()) {
+                bluetoothLeScanner!!.stopScan(scanCallback)
+                Log.d(TAG, "停止扫描蓝牙设备")
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "停止扫描失败：权限不足", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "停止扫描失败：${e.message}", e)
+        }
+    }
+    
+    // 扫描回调
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            super.onScanResult(callbackType, result)
+            handleScanResult(result)
+        }
+        
+        override fun onBatchScanResults(results: MutableList<ScanResult>) {
+            super.onBatchScanResults(results)
+            for (result in results) {
+                handleScanResult(result)
+            }
+        }
+        
+        override fun onScanFailed(errorCode: Int) {
+            super.onScanFailed(errorCode)
+            runOnUiThread {
+                val errorMsg = when (errorCode) {
+                    ScanCallback.SCAN_FAILED_ALREADY_STARTED -> "扫描已在进行中"
+                    ScanCallback.SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "应用注册失败"
+                    ScanCallback.SCAN_FAILED_FEATURE_UNSUPPORTED -> "不支持扫描功能"
+                    ScanCallback.SCAN_FAILED_INTERNAL_ERROR -> "内部错误"
+                    else -> "扫描失败：错误代码 $errorCode"
+                }
+                Log.e(TAG, errorMsg)
+                Toast.makeText(this@MainActivity, errorMsg, Toast.LENGTH_SHORT).show()
+                if (isScanning) {
+                    stopScan()
+                }
+            }
+        }
+    }
+    
+    private fun handleScanResult(result: ScanResult) {
+        val device = result.device
+        val deviceName = device.name ?: "Unknown Device"
+        val macAddress = device.address
+        
+        // 过滤掉无效的设备
+        if (macAddress.isBlank()) {
+            return
+        }
+        
+        // 转换为DeviceInfo
+        val deviceInfo = DeviceInfo(
+            name = deviceName,
+            macAddress = macAddress,
+            isConnected = false
+        )
+        
+        // 通过SDK的回调通知设备发现
+        // 注意：setupCallbacks中已设置的ConnectionCallback.onDeviceFound会更新UI
+        runOnUiThread {
+            Log.d(TAG, "发现设备: $deviceName ($macAddress)")
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+            bluetoothService.onDeviceFound(deviceInfo)
+        }
+    }
+    
+    private fun checkBluetoothPermissions(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ 需要BLUETOOTH_SCAN权限
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_SCAN
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            // Android 11及以下需要位置权限
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED ||
+            ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    
+    private fun isBluetoothEnabled(): Boolean {
+        return bluetoothAdapter?.isEnabled == true
+    }
+    
+    private fun checkBluetoothAvailable(): Boolean {
+        if (bluetoothAdapter == null) {
+            return false
+        }
+        return isBluetoothEnabled()
     }
     
     private fun updateConnectionStatus(connected: Boolean) {
@@ -367,8 +572,31 @@ class MainActivity : AppCompatActivity() {
         Log.d(TAG, "收到事件: ${event.javaClass.simpleName}")
     }
     
+    override fun onPause() {
+        super.onPause()
+        // 可选：在Activity暂停时停止扫描以节省电量
+        // if (isScanning) {
+        //     stopScan()
+        // }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // 如果蓝牙被关闭，更新UI状态
+        if (bluetoothAdapter != null && !bluetoothAdapter!!.isEnabled && isScanning) {
+            stopScan()
+            Toast.makeText(this, "蓝牙已关闭，停止扫描", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        
+        // 停止扫描
+        if (isScanning) {
+            stopScan()
+        }
+        
         EventBus.getDefault().unregister(this)
         // 可选：清理SDK资源
         // BajiSDK.getInstance().cleanup()
