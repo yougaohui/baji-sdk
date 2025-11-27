@@ -24,12 +24,15 @@ import com.baji.demo.utils.TimerTaskImp
 import com.baji.demo.utils.VideoUtils
 import com.baji.demo.view.RangeSeekBarView
 import com.baji.demo.view.VideoCropOverlayView
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import com.baji.sdk.BajiSDK
 import com.baji.sdk.callback.FileTransferCallback
 import com.baji.sdk.callback.VideoConvertCallback
 import com.baji.sdk.model.FileInfo
 import com.baji.sdk.model.VideoConvertParams
 import java.io.File
+import java.util.ArrayList
 import java.util.Timer
 
 /**
@@ -64,6 +67,10 @@ class VideoCutActivity : AppCompatActivity() {
     private lateinit var mCacheRootPath: String
     private lateinit var outDir: String
     
+    // 视频帧相关
+    private var mFrames = 0 // 视频帧数（秒数）
+    private val frameList = ArrayList<String>() // 存储每一帧的路径
+    
     // 视频原始尺寸
     private var mVideoOriginalWidth = 0
     private var mVideoOriginalHeight = 0
@@ -73,6 +80,9 @@ class VideoCutActivity : AppCompatActivity() {
     private var mCropY = 0f
     private var mCropWidth = 0f
     private var mCropHeight = 0f
+    
+    // 用于帧提取的视频路径（如果是Content URI，需要先复制到临时文件）
+    private var frameExtractionVideoPath: String? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +101,13 @@ class VideoCutActivity : AppCompatActivity() {
         mAdapter = FramesAdapter()
         mRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         mRecyclerView.adapter = mAdapter
+        
+        // 根据RangeSeekBarView的宽度计算每一帧的宽度
+        mRangeSeekBarView.post {
+            val width = mRangeSeekBarView.width / MAX_TIME
+            mAdapter?.setItemWidth(width) // 根据seekbar的长度除以最大帧数，就是我们每一帧需要的宽度
+            Log.d(TAG, "设置帧宽度: $width (RangeSeekBarView宽度: ${mRangeSeekBarView.width}, MAX_TIME: $MAX_TIME)")
+        }
         
         mTvOk.setOnClickListener {
             trimVideo()
@@ -176,15 +193,26 @@ class VideoCutActivity : AppCompatActivity() {
                 
                 Log.d(TAG, "视频准备完成，尺寸: ${mVideoOriginalWidth}x${mVideoOriginalHeight}")
                 
-                // 初始化裁剪框
-                mVideoView.post { initCropOverlay() }
-                
-                // 初始化时间范围
-                initSeekBar()
-                
-                // 开始播放
-                mVideoView.start()
-                startTimer()
+                // 准备帧提取的视频路径（如果是Content URI，需要先复制）
+                prepareVideoForFrameExtraction { success ->
+                    if (success) {
+                        // 初始化裁剪框
+                        mVideoView.post { initCropOverlay() }
+                        
+                        // 初始化时间范围
+                        initSeekBar()
+                        
+                        // 开始提取视频帧
+                        analysisVideo()
+                        
+                        // 开始播放
+                        mVideoView.start()
+                        startTimer()
+                    } else {
+                        Log.e(TAG, "准备视频文件失败，无法提取帧")
+                        Toast.makeText(this, "无法提取视频帧", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
             
             mVideoView.requestFocus()
@@ -281,6 +309,182 @@ class VideoCutActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "重新播放视频失败", e)
+        }
+    }
+    
+    /**
+     * 准备视频文件用于帧提取（如果是Content URI，需要先复制到临时文件）
+     */
+    private fun prepareVideoForFrameExtraction(callback: (Boolean) -> Unit) {
+        val videoPath = videoInfo?.path ?: ""
+        val videoUri = videoInfo?.uri
+        val isContentUri = (videoPath.isNotEmpty() && videoPath.startsWith("content://")) || 
+                          (videoUri != null && videoUri.toString().startsWith("content://"))
+        
+        if (isContentUri && videoUri != null) {
+            // Content URI，需要复制到临时文件
+            Log.d(TAG, "检测到Content URI，复制视频到临时文件用于帧提取...")
+            val tempPath = copyContentUriToTempFile(videoUri)
+            if (tempPath != null) {
+                frameExtractionVideoPath = tempPath
+                Log.d(TAG, "视频已复制到临时文件: $tempPath")
+                callback(true)
+            } else {
+                Log.e(TAG, "复制Content URI失败")
+                callback(false)
+            }
+        } else {
+            // 普通文件路径
+            frameExtractionVideoPath = videoPath
+            callback(true)
+        }
+    }
+    
+    /**
+     * 分析视频并开始提取帧
+     */
+    private fun analysisVideo() {
+        try {
+            if (mp == null) {
+                Log.e(TAG, "MediaPlayer为空，无法分析视频")
+                return
+            }
+            
+            val duration = mp!!.duration
+            mFrames = duration / 1000 // 转换为秒数
+            if (mFrames > MAX_TIME) {
+                mFrames = MAX_TIME // 最多提取5秒的帧
+            }
+            
+            Log.d(TAG, "视频总时长: ${duration}ms, 帧数: $mFrames")
+            
+            // 如果帧数小于1，不进行提取
+            if (mFrames < 1) {
+                Log.w(TAG, "视频时长太短，无法提取帧")
+                return
+            }
+            
+            // 确保输出目录存在
+            val dir = File(outDir)
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            
+            // 开始提取第一帧
+            gotoGetFrameAtTime(0)
+        } catch (e: Exception) {
+            Log.e(TAG, "分析视频失败: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * 提取指定时间的视频帧
+     */
+    private fun gotoGetFrameAtTime(time: Int) {
+        if (time >= mFrames) {
+            Log.d(TAG, "所有帧提取完成，共 $mFrames 帧")
+            return
+        }
+        
+        val inputPath = frameExtractionVideoPath
+        if (inputPath == null || inputPath.isEmpty()) {
+            Log.e(TAG, "视频路径为空，无法提取帧")
+            return
+        }
+        
+        // 检查是否是Content URI（这种情况不应该发生，但为了安全）
+        if (inputPath.startsWith("content://")) {
+            Log.e(TAG, "FFmpeg 无法处理 Content URI: $inputPath")
+            return
+        }
+        
+        val outfile = "$outDir${File.separator}$time.jpg"
+        
+        // 获取表盘信息并计算帧尺寸
+        val frameSize = getFrameSizeFromClockDialInfo()
+        
+        // 构建FFmpeg命令字符串
+        val command = "-y -ss $time -i \"$inputPath\" -frames:v 1 -f image2 -s $frameSize \"$outfile\""
+        val nextTime = time + 1
+        
+        Log.d(TAG, "提取第 $time 秒的帧，命令: $command")
+        
+        // 检查Activity是否还在运行
+        if (isFinishing || isDestroyed) {
+            Log.w(TAG, "Activity已销毁，取消获取帧")
+            return
+        }
+        
+        // 使用FFmpegKit执行命令
+        FFmpegKit.executeAsync(command) { session ->
+            runOnUiThread {
+                try {
+                    if (isFinishing || isDestroyed) {
+                        Log.w(TAG, "Activity已销毁，取消获取帧回调")
+                        return@runOnUiThread
+                    }
+                    
+                    // 检查执行结果
+                    val returnCode = session.returnCode
+                    if (ReturnCode.isSuccess(returnCode)) {
+                        Log.d(TAG, "完成提取第 $time 秒的帧")
+                        if (time == 0) {
+                            // 第一帧，初始化列表
+                            frameList.clear()
+                            for (x in 0 until mFrames) {
+                                frameList.add(outfile)
+                            }
+                            mAdapter?.updateList(frameList)
+                        } else {
+                            // 更新指定位置的帧
+                            if (time < frameList.size) {
+                                frameList[time] = outfile
+                                mAdapter?.updateItem(time, outfile)
+                            }
+                        }
+                        // 继续提取下一帧
+                        gotoGetFrameAtTime(nextTime)
+                    } else {
+                        val output = session.output
+                        Log.e(TAG, "提取第 $time 秒的帧错误: $output")
+                        // 继续处理下一帧
+                        gotoGetFrameAtTime(nextTime)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "获取帧完成回调中出错", e)
+                    // 继续处理下一帧
+                    gotoGetFrameAtTime(nextTime)
+                }
+            }
+        }
+    }
+    
+    /**
+     * 从表盘信息获取帧尺寸
+     */
+    private fun getFrameSizeFromClockDialInfo(): String {
+        return try {
+            val clockDialInfo = BajiSDK.getInstance().getClockDialInfoService().getCurrentClockDialInfo()
+            if (clockDialInfo != null) {
+                val width = clockDialInfo.width.toInt()
+                val height = clockDialInfo.height.toInt()
+                val frameSize = "${width}x${height}"
+                
+                Log.d(TAG, "=== 帧尺寸设置 ===")
+                Log.d(TAG, "从表盘信息获取帧尺寸: $frameSize")
+                Log.d(TAG, "设备屏幕尺寸: ${width}x${height}")
+                
+                frameSize
+            } else {
+                Log.w(TAG, "表盘信息不存在，使用默认帧尺寸")
+                val defaultSize = "320x384"
+                Log.d(TAG, "默认帧尺寸: $defaultSize")
+                defaultSize
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "获取表盘信息失败，使用默认帧尺寸", e)
+            val defaultSize = "320x384"
+            defaultSize
         }
     }
     
