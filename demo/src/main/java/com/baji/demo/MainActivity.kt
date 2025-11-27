@@ -32,6 +32,7 @@ import com.baji.sdk.model.DeviceInfo
 import com.baji.sdk.model.FileInfo
 import com.baji.sdk.model.ImageConvertParams
 import com.baji.sdk.model.VideoConvertParams
+import com.baji.sdk.util.BluetoothFilterUtil
 import com.baji.demo.databinding.ActivityMainBinding
 import java.io.File
 import com.permissionx.guolindev.PermissionX
@@ -389,7 +390,7 @@ class MainActivity : AppCompatActivity() {
     
     private fun handleScanResult(result: ScanResult) {
         val device = result.device
-        val deviceName = device.name ?: "Unknown Device"
+        val deviceName = device.name
         val macAddress = device.address
         
         // 过滤掉无效的设备
@@ -397,9 +398,19 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        // 使用SDK的过滤工具检查是否为电子吧唧设备
+        val scanRecord = result.scanRecord
+        val manufacturerData = scanRecord?.manufacturerSpecificData
+        
+        // 综合检查：设备名称和设备特征
+        if (!BluetoothFilterUtil.isValidBajiDevice(manufacturerData, deviceName)) {
+            Log.d(TAG, "过滤非电子吧唧设备: $deviceName ($macAddress)")
+            return
+        }
+        
         // 转换为DeviceInfo
         val deviceInfo = DeviceInfo(
-            name = deviceName,
+            name = deviceName ?: "Unknown Device",
             macAddress = macAddress,
             isConnected = false
         )
@@ -407,7 +418,7 @@ class MainActivity : AppCompatActivity() {
         // 通过SDK的回调通知设备发现
         // 注意：setupCallbacks中已设置的ConnectionCallback.onDeviceFound会更新UI
         runOnUiThread {
-            Log.d(TAG, "发现设备: $deviceName ($macAddress)")
+            Log.d(TAG, "发现电子吧唧设备: ${deviceInfo.name} (${deviceInfo.macAddress})")
             val bluetoothService = BajiSDK.getInstance().getBluetoothService()
             bluetoothService.onDeviceFound(deviceInfo)
         }
