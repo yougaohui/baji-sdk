@@ -6,13 +6,13 @@ import com.baji.protocol.BajiProtocolManager
 import com.baji.sdk.callback.ConnectionCallback
 import com.baji.sdk.model.DeviceInfo
 import com.legend.mywatch.sdk.mywatchsdklib.android.event.ConnectStatusEvent
-import com.legend.mywatch.sdk.mywatchsdklib.android.sdk.WatchSDK
+import com.legend.mywatch.sdk.mywatchsdklib.android.sdk.SDKCmdManager
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 
 /**
  * 蓝牙连接服务
- * 提供设备扫描、连接、断开等功能
+ * 提供设备连接、断开等功能
  */
 class BluetoothService(
     private val context: Context,
@@ -21,7 +21,6 @@ class BluetoothService(
     private val TAG = "BluetoothService"
     
     private var connectionCallback: ConnectionCallback? = null
-    private var isScanning = false
     private var connectedDevice: DeviceInfo? = null
     
     init {
@@ -39,49 +38,12 @@ class BluetoothService(
     }
     
     /**
-     * 开始扫描设备
-     */
-    fun startScan() {
-        if (isScanning) {
-            Log.w(TAG, "扫描已在进行中")
-            return
-        }
-        
-        try {
-            // 使用WatchSDK的扫描功能
-            WatchSDK.startScan()
-            isScanning = true
-            Log.d(TAG, "开始扫描蓝牙设备")
-        } catch (e: Exception) {
-            Log.e(TAG, "开始扫描失败: ${e.message}", e)
-            connectionCallback?.onConnectionFailed("扫描失败: ${e.message}")
-        }
-    }
-    
-    /**
-     * 停止扫描设备
-     */
-    fun stopScan() {
-        if (!isScanning) {
-            return
-        }
-        
-        try {
-            WatchSDK.stopScan()
-            isScanning = false
-            Log.d(TAG, "停止扫描蓝牙设备")
-        } catch (e: Exception) {
-            Log.e(TAG, "停止扫描失败: ${e.message}", e)
-        }
-    }
-    
-    /**
      * 连接设备
      */
     fun connectDevice(macAddress: String) {
         try {
             Log.d(TAG, "开始连接设备: $macAddress")
-            WatchSDK.connectDevice(macAddress)
+            SDKCmdManager.connectWatch(macAddress)
         } catch (e: Exception) {
             Log.e(TAG, "连接设备失败: ${e.message}", e)
             connectionCallback?.onConnectionFailed("连接失败: ${e.message}")
@@ -94,7 +56,7 @@ class BluetoothService(
     fun disconnectDevice() {
         try {
             Log.d(TAG, "断开设备连接")
-            WatchSDK.disconnectDevice()
+            SDKCmdManager.disconnectWatch()
             connectedDevice = null
         } catch (e: Exception) {
             Log.e(TAG, "断开连接失败: ${e.message}", e)
@@ -140,7 +102,7 @@ class BluetoothService(
     }
     
     /**
-     * 处理设备发现事件（需要从扫描结果中获取）
+     * 处理设备发现事件
      */
     fun onDeviceFound(deviceInfo: DeviceInfo) {
         connectionCallback?.onDeviceFound(deviceInfo)
@@ -150,7 +112,6 @@ class BluetoothService(
      * 清理资源
      */
     fun cleanup() {
-        stopScan()
         disconnectDevice()
         if (EventBus.getDefault().isRegistered(this)) {
             EventBus.getDefault().unregister(this)
