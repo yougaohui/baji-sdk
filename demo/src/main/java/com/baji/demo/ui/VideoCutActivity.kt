@@ -9,6 +9,8 @@ import android.util.Log
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -108,20 +110,50 @@ class VideoCutActivity : AppCompatActivity() {
         
         try {
             val videoPath = videoInfo!!.path
-            val videoFile = File(videoPath)
+            val videoUri = videoInfo!!.uri
             
-            if (!videoFile.exists()) {
-                Log.e(TAG, "视频文件不存在: $videoPath")
-                Toast.makeText(this, "视频文件不存在", Toast.LENGTH_SHORT).show()
+            Log.d(TAG, "=== 视频信息 ===")
+            Log.d(TAG, "视频路径: $videoPath")
+            Log.d(TAG, "视频URI: $videoUri")
+            
+            // 检查是否是 Content URI - 优先检查videoPath，因为可能是Content URI字符串
+            val isContentUri = (videoPath.isNotEmpty() && videoPath.startsWith("content://")) || 
+                              (videoUri != null && videoUri.toString().startsWith("content://"))
+            
+            Log.d(TAG, "是否为Content URI: $isContentUri")
+            
+            if (!isContentUri && videoPath.isNotEmpty()) {
+                // 只有非 Content URI 才检查文件是否存在
+                try {
+                    val videoFile = File(videoPath)
+                    if (!videoFile.exists()) {
+                        Log.e(TAG, "视频文件不存在: $videoPath")
+                        Toast.makeText(this, "视频文件不存在", Toast.LENGTH_SHORT).show()
+                        finish()
+                        return
+                    }
+                    Log.d(TAG, "视频文件存在: $videoPath, 大小: ${videoFile.length()} bytes")
+                } catch (e: Exception) {
+                    Log.e(TAG, "检查视频文件失败: ${e.message}", e)
+                    Toast.makeText(this, "无法访问视频文件", Toast.LENGTH_SHORT).show()
+                    finish()
+                    return
+                }
+            } else if (isContentUri) {
+                Log.d(TAG, "跳过文件存在检查（Content URI）")
+            } else {
+                Log.e(TAG, "视频路径为空")
+                Toast.makeText(this, "视频路径无效", Toast.LENGTH_SHORT).show()
                 finish()
                 return
             }
             
             // 设置视频路径
-            val videoUri = videoInfo!!.uri
-            if (videoUri != null && videoUri.toString().startsWith("content://")) {
+            if (isContentUri && videoUri != null) {
+                Log.d(TAG, "使用 Content URI 播放视频: $videoUri")
                 mVideoView.setVideoURI(videoUri)
             } else {
+                Log.d(TAG, "使用文件路径播放视频: $videoPath")
                 mVideoView.setVideoPath(videoPath)
             }
             
@@ -268,7 +300,41 @@ class VideoCutActivity : AppCompatActivity() {
         val targetWidth = clockDialInfo.width.toInt()
         val targetHeight = clockDialInfo.height.toInt()
         
-        val inputPath = videoInfo!!.path
+        val videoPath = videoInfo!!.path
+        val videoUri = videoInfo!!.uri
+        val isContentUri = (videoPath.isNotEmpty() && videoPath.startsWith("content://")) || 
+                          (videoUri != null && videoUri.toString().startsWith("content://"))
+        
+        Log.d(TAG, "=== 视频转换准备 ===")
+        Log.d(TAG, "视频路径: $videoPath")
+        Log.d(TAG, "视频URI: $videoUri")
+        Log.d(TAG, "是否为Content URI: $isContentUri")
+        
+        // 如果是 Content URI，需要先复制到临时文件（FFmpeg需要实际的文件路径）
+        val inputPath = if (isContentUri && videoUri != null) {
+            Log.d(TAG, "检测到Content URI，开始复制到临时文件...")
+            loadingDialog?.setMessage("正在复制视频文件...")
+            // 复制 Content URI 到临时文件
+            copyContentUriToTempFile(videoUri)
+        } else {
+            Log.d(TAG, "使用文件路径: $videoPath")
+            videoPath
+        }
+        
+        if (inputPath == null || inputPath.isEmpty()) {
+            loadingDialog?.dismiss()
+            val errorMsg = if (isContentUri) {
+                "无法复制视频文件，请检查文件权限"
+            } else {
+                "无法访问视频文件"
+            }
+            Toast.makeText(this, errorMsg, Toast.LENGTH_SHORT).show()
+            Log.e(TAG, "输入路径无效: $inputPath")
+            return
+        }
+        
+        Log.d(TAG, "最终使用的输入路径: $inputPath")
+        
         val outputPath = "$mCacheRootPath${VideoUtils.getFileName(videoInfo!!.name)}_trim.avi"
         
         // 创建裁剪区域（如果有）
@@ -349,6 +415,50 @@ class VideoCutActivity : AppCompatActivity() {
         videoService?.convertToAVI(inputPath, outputPath, params)
     }
     
+    /**
+     * 将 Content URI 复制到临时文件
+     * @param uri Content URI
+     * @return 临时文件路径，如果失败返回 null
+     */
+    private fun copyContentUriToTempFile(uri: android.net.Uri): String? {
+        return try {
+            Log.d(TAG, "开始复制 Content URI 到临时文件: $uri")
+            
+            val tempFile = File(mCacheRootPath, "temp_video_${System.currentTimeMillis()}.mp4")
+            tempFile.parentFile?.mkdirs()
+            
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                FileOutputStream(tempFile).use { outputStream ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalBytes = 0L
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalBytes += bytesRead
+                    }
+                    Log.d(TAG, "Content URI 复制完成，共 ${totalBytes} bytes")
+                }
+            } ?: run {
+                Log.e(TAG, "无法打开 Content URI 输入流")
+                return null
+            }
+            
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                Log.e(TAG, "临时文件创建失败或为空")
+                return null
+            }
+            
+            Log.d(TAG, "Content URI 已复制到临时文件: ${tempFile.absolutePath}, 大小: ${tempFile.length()} bytes")
+            tempFile.absolutePath
+        } catch (e: SecurityException) {
+            Log.e(TAG, "复制 Content URI 失败（权限问题）: ${e.message}", e)
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "复制 Content URI 到临时文件失败: ${e.message}", e)
+            null
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
@@ -356,6 +466,21 @@ class VideoCutActivity : AppCompatActivity() {
         mp?.release()
         mp = null
         loadingDialog?.dismiss()
+        
+        // 清理临时文件
+        try {
+            val tempDir = File(mCacheRootPath)
+            if (tempDir.exists() && tempDir.isDirectory) {
+                tempDir.listFiles()?.forEach { file ->
+                    if (file.name.startsWith("temp_video_")) {
+                        file.delete()
+                        Log.d(TAG, "已删除临时文件: ${file.absolutePath}")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "清理临时文件失败: ${e.message}", e)
+        }
     }
 }
 

@@ -715,13 +715,25 @@ class MainActivity : AppCompatActivity() {
                         // 判断是图片还是视频
                         if (localMedia.mimeType?.startsWith("video/") == true) {
                             // 视频文件
-                            val videoPath = localMedia.path
-                            val videoName = localMedia.fileName ?: File(videoPath).name
-                            val videoUri = if (localMedia.androidQToPath != null) {
-                                android.net.Uri.parse(localMedia.androidQToPath)
+                            val videoPath = localMedia.realPath
+                            val videoUri = if (localMedia.androidQToPath != null && localMedia.androidQToPath!!.startsWith("content://")) {
+                                // 如果androidQToPath是Content URI，优先使用
+                                android.net.Uri.parse(localMedia.androidQToPath!!)
+                            } else if (videoPath.startsWith("content://")) {
+                                // 如果path本身就是Content URI
+                                android.net.Uri.parse(videoPath)
                             } else {
+                                // 普通文件路径
                                 android.net.Uri.fromFile(File(videoPath))
                             }
+                            
+                            // 获取视频名称
+                            val videoName = localMedia.fileName ?: 
+                                          (if (videoPath.startsWith("content://")) {
+                                              "video_${System.currentTimeMillis()}.mp4"
+                                          } else {
+                                              File(videoPath).name
+                                          })
                             
                             val videoInfo = com.baji.demo.model.VideoInfo(
                                 path = videoPath,
