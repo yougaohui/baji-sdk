@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -56,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     
     // ViewModel
     private lateinit var imageSyncViewModel: ImageSyncViewModel
+    private lateinit var videoSyncViewModel: com.baji.demo.viewmodel.VideoSyncViewModel
     
     // 蓝牙扫描相关
     private var bluetoothAdapter: BluetoothAdapter? = null
@@ -82,6 +84,7 @@ class MainActivity : AppCompatActivity() {
         
         // 初始化ViewModel
         imageSyncViewModel = ViewModelProvider(this)[ImageSyncViewModel::class.java]
+        videoSyncViewModel = ViewModelProvider(this)[com.baji.demo.viewmodel.VideoSyncViewModel::class.java]
         setupImageSyncViewModel()
         
         // 初始化UI
@@ -304,8 +307,7 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "请先连接设备", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            // TODO: 实现视频选择功能
-            Toast.makeText(this, "视频同步功能待实现", Toast.LENGTH_SHORT).show()
+            videoSyncViewModel.startPictureSelectorForVideo(this)
         }
         
         updateConnectionStatus(false)
@@ -710,7 +712,31 @@ class MainActivity : AppCompatActivity() {
                     val result = PictureSelector.obtainMultipleResult(data)
                     if (result.isNotEmpty()) {
                         val localMedia = result[0]
-                        imageSyncViewModel.handlePictureSelectorResult(localMedia, this)
+                        // 判断是图片还是视频
+                        if (localMedia.mimeType?.startsWith("video/") == true) {
+                            // 视频文件
+                            val videoPath = localMedia.path
+                            val videoName = localMedia.fileName ?: File(videoPath).name
+                            val videoUri = if (localMedia.androidQToPath != null) {
+                                android.net.Uri.parse(localMedia.androidQToPath)
+                            } else {
+                                android.net.Uri.fromFile(File(videoPath))
+                            }
+                            
+                            val videoInfo = com.baji.demo.model.VideoInfo(
+                                path = videoPath,
+                                name = videoName,
+                                uri = videoUri
+                            )
+                            
+                            // 启动VideoCutActivity
+                            val intent = Intent(this, com.baji.demo.ui.VideoCutActivity::class.java)
+                            intent.putExtra(com.baji.demo.ui.VideoCutActivity.PATH, videoInfo)
+                            startActivity(intent)
+                        } else {
+                            // 图片文件
+                            imageSyncViewModel.handlePictureSelectorResult(localMedia, this)
+                        }
                     }
                 }
             }
