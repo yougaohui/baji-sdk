@@ -147,11 +147,11 @@ class BajiSDK private constructor() {
             // 初始化各个服务
             bluetoothService = BluetoothService(context, protocolManager)
             otaService = OTAService(context, config)
-            videoConvertService = VideoConvertService(context, config)
-            imageConvertService = ImageConvertService(context, config)
-            watchFaceService = WatchFaceService(context, config)
             clockDialInfoService = ClockDialInfoService()
             clockDialInfoService?.initialize()
+            videoConvertService = VideoConvertService(context, config, clockDialInfoService)
+            imageConvertService = ImageConvertService(context, config)
+            watchFaceService = WatchFaceService(context, config)
             fileTransferService = FileTransferService(context, protocolManager, clockDialInfoService)
             
             isInitialized = true
