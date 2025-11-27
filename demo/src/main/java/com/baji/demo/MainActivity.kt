@@ -133,12 +133,27 @@ class MainActivity : AppCompatActivity() {
                 runOnUiThread {
                     connectedDevice = deviceInfo
                     updateConnectionStatus(true)
+                    
+                    // 更新设备列表中的连接状态
+                    val index = deviceList.indexOfFirst { it.macAddress == deviceInfo.macAddress }
+                    if (index != -1) {
+                        deviceList[index] = deviceInfo.copy(isConnected = true)
+                        deviceAdapter.notifyItemChanged(index)
+                    }
+                    
                     Toast.makeText(this@MainActivity, "设备已连接: ${deviceInfo.name}", Toast.LENGTH_SHORT).show()
                 }
             }
             
             override fun onDisconnected(deviceInfo: DeviceInfo) {
                 runOnUiThread {
+                    // 更新设备列表中的连接状态
+                    val index = deviceList.indexOfFirst { it.macAddress == deviceInfo.macAddress }
+                    if (index != -1) {
+                        deviceList[index] = deviceInfo.copy(isConnected = false)
+                        deviceAdapter.notifyItemChanged(index)
+                    }
+                    
                     connectedDevice = null
                     updateConnectionStatus(false)
                     Toast.makeText(this@MainActivity, "设备已断开", Toast.LENGTH_SHORT).show()
@@ -206,12 +221,18 @@ class MainActivity : AppCompatActivity() {
     private fun initUI() {
         // 设备列表
         deviceAdapter = DeviceAdapter(deviceList) { device ->
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
             if (connectedDevice?.macAddress == device.macAddress) {
                 // 断开连接
-                BajiSDK.getInstance().getBluetoothService().disconnectDevice()
+                bluetoothService.disconnectDevice()
             } else {
                 // 连接设备
-                BajiSDK.getInstance().getBluetoothService().connectDevice(device.macAddress)
+                bluetoothService.connectDevice(device.macAddress)
+                
+                // 连接后延迟检查连接状态，确保UI正确更新
+                Handler(Looper.getMainLooper()).postDelayed({
+                    bluetoothService.checkAndUpdateConnectionStatus()
+                }, 3000) // 3秒后再次检查连接状态
             }
         }
         
