@@ -34,7 +34,9 @@ class DeviceAdapter(
 
         fun bind(device: DeviceInfo) {
             text1.text = device.name
-            text2.text = "${device.macAddress} ${if (device.isConnected) "(已连接)" else ""}"
+            val rssiText = device.rssi?.let { "RSSI: ${it}dBm" } ?: ""
+            val statusText = if (device.isConnected) "(已连接)" else ""
+            text2.text = "${device.macAddress} $rssiText $statusText".trim()
         }
     }
 }

@@ -31,6 +31,11 @@ data class DeviceInfo(
     /**
      * 连接状态
      */
-    val isConnected: Boolean = false
+    val isConnected: Boolean = false,
+    
+    /**
+     * 信号强度（RSSI，单位：dBm）
+     */
+    val rssi: Int? = null
 ) : Parcelable
 

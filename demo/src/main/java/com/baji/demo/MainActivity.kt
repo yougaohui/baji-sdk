@@ -155,9 +155,15 @@ class MainActivity : AppCompatActivity() {
             
             override fun onDeviceFound(deviceInfo: DeviceInfo) {
                 runOnUiThread {
-                    if (!deviceList.any { it.macAddress == deviceInfo.macAddress }) {
+                    val existingIndex = deviceList.indexOfFirst { it.macAddress == deviceInfo.macAddress }
+                    if (existingIndex == -1) {
+                        // 新设备，添加到列表
                         deviceList.add(deviceInfo)
                         deviceAdapter.notifyItemInserted(deviceList.size - 1)
+                    } else {
+                        // 已存在的设备，更新信息（包括RSSI）
+                        deviceList[existingIndex] = deviceInfo
+                        deviceAdapter.notifyItemChanged(existingIndex)
                     }
                 }
             }
@@ -408,11 +414,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        // 获取信号强度（RSSI）
+        val rssi = result.rssi
+        
         // 转换为DeviceInfo
         val deviceInfo = DeviceInfo(
             name = deviceName ?: "Unknown Device",
             macAddress = macAddress,
-            isConnected = false
+            isConnected = false,
+            rssi = rssi
         )
         
         // 通过SDK的回调通知设备发现
