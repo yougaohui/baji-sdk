@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import com.baji.protocol.BajiProtocolManager
 import com.baji.protocol.BroadcastSender
+import com.baji.protocol.service.SDKEventListener
 import com.baji.sdk.service.*
+import org.greenrobot.eventbus.EventBus
 import xfkj.fitpro.activity.ota.manager.OTAInitializer
 
 /**
@@ -44,6 +46,7 @@ class BajiSDK private constructor() {
     private var imageConvertService: ImageConvertService? = null
     private var watchFaceService: WatchFaceService? = null
     private var fileTransferService: FileTransferService? = null
+    private var clockDialInfoService: ClockDialInfoService? = null
     
     // 协议管理器
     private var protocolManager: BajiProtocolManager? = null
@@ -87,7 +90,58 @@ class BajiSDK private constructor() {
             protocolManager = BajiProtocolManager()
             protocolManager?.initialize(
                 context = context,
-                broadcastSender = broadcastSender
+                broadcastSender = broadcastSender,
+                connectionCallback = null,
+                packetSendCallback = null,
+                packetReceiveCallback = null,
+                sdkEventListener = object : SDKEventListener {
+                    override fun onSDKEvent(sdkEvent: com.legend.mywatch.sdk.mywatchsdklib.android.event.BaseEvent?) {
+                        // 直接将SDK原始事件发布到EventBus
+                        if (sdkEvent != null) {
+                            if (config.enableLog) {
+                                Log.d(TAG, "=== SDKEventListener 收到SDK原始事件 ===")
+                                Log.d(TAG, "事件类型: ${sdkEvent.javaClass.name}")
+                                Log.d(TAG, "事件简单名称: ${sdkEvent.javaClass.simpleName}")
+                                
+                                // 如果是 ClockDialInfoEvent，打印详细信息
+                                if (sdkEvent is com.legend.mywatch.sdk.mywatchsdklib.android.event.ClockDialInfoEvent) {
+                                    Log.d(TAG, "--- ClockDialInfoEvent 详细信息 ---")
+                                    Log.d(TAG, "body是否为null: ${sdkEvent.body == null}")
+                                    if (sdkEvent.body != null) {
+                                        val body = sdkEvent.body!!
+                                        try {
+                                            Log.d(TAG, "body.width: ${body.width}")
+                                            Log.d(TAG, "body.height: ${body.height}")
+                                            Log.d(TAG, "body.screenType: ${body.screenType}")
+                                            Log.d(TAG, "body.algorithm: ${body.algorithm}")
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "读取body字段失败: ${e.message}", e)
+                                        }
+                                    }
+                                    try {
+                                        val errorInfo = sdkEvent.errorInfo
+                                        Log.d(TAG, "errorInfo: $errorInfo")
+                                    } catch (e: Exception) {
+                                        Log.d(TAG, "errorInfo获取失败: ${e.message}")
+                                    }
+                                    Log.d(TAG, "--- ClockDialInfoEvent 详细信息结束 ---")
+                                }
+                            }
+                            
+                            // 发布到EventBus
+                            EventBus.getDefault().post(sdkEvent)
+                            
+                            if (config.enableLog) {
+                                Log.d(TAG, "SDK原始事件已发布到EventBus: ${sdkEvent.javaClass.simpleName}")
+                                Log.d(TAG, "=== SDKEventListener 事件处理完成 ===")
+                            }
+                        } else {
+                            if (config.enableLog) {
+                                Log.w(TAG, "SDKEventListener 收到null事件")
+                            }
+                        }
+                    }
+                }
             )
             
             // 初始化各个服务
@@ -96,7 +150,9 @@ class BajiSDK private constructor() {
             videoConvertService = VideoConvertService(context, config)
             imageConvertService = ImageConvertService(context, config)
             watchFaceService = WatchFaceService(context, config)
-            fileTransferService = FileTransferService(context, protocolManager)
+            clockDialInfoService = ClockDialInfoService()
+            clockDialInfoService?.initialize()
+            fileTransferService = FileTransferService(context, protocolManager, clockDialInfoService)
             
             isInitialized = true
             
@@ -168,6 +224,14 @@ class BajiSDK private constructor() {
     }
     
     /**
+     * 获取表盘信息服务
+     */
+    fun getClockDialInfoService(): ClockDialInfoService {
+        checkInitialized()
+        return clockDialInfoService ?: throw IllegalStateException("表盘信息服务未初始化")
+    }
+    
+    /**
      * 获取协议管理器（内部使用）
      */
     internal fun getProtocolManager(): BajiProtocolManager? {
@@ -188,6 +252,7 @@ class BajiSDK private constructor() {
         imageConvertService?.cleanup()
         watchFaceService?.cleanup()
         fileTransferService?.cleanup()
+        clockDialInfoService?.cleanup()
         
         protocolManager?.cleanup()
         protocolManager = null

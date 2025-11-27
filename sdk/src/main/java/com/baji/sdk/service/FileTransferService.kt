@@ -23,7 +23,8 @@ import java.io.File
  */
 class FileTransferService(
     private val context: Context,
-    private val protocolManager: BajiProtocolManager?
+    private val protocolManager: BajiProtocolManager?,
+    private val clockDialInfoService: ClockDialInfoService?
 ) {
     private val TAG = "FileTransferService"
     private var transferCallback: FileTransferCallback? = null
@@ -78,10 +79,16 @@ class FileTransferService(
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 Log.d(TAG, "开始表盘传输图片: $imagePath")
-                transferCallback?.onTransferStart()
                 
-                // 获取设备表盘信息（使用默认值或从协议管理器获取）
-                val clockDialInfo = getDefaultClockDialInfo()
+                // 检查表盘信息是否存在
+                val clockDialInfo = getClockDialInfo()
+                if (clockDialInfo == null) {
+                    Log.e(TAG, "表盘信息不存在，无法传输图片")
+                    transferCallback?.onTransferFailed("表盘信息不存在，请重新连接设备并等待表盘信息加载完成")
+                    return@launch
+                }
+                
+                transferCallback?.onTransferStart()
                 
                 // 构建 WatchTheme3Body 数据体
                 val watchTheme3Body = createWatchTheme3Body().apply {
@@ -129,10 +136,16 @@ class FileTransferService(
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 Log.d(TAG, "开始表盘传输视频: $videoPath")
-                transferCallback?.onTransferStart()
                 
-                // 获取设备表盘信息
-                val clockDialInfo = getDefaultClockDialInfo()
+                // 检查表盘信息是否存在
+                val clockDialInfo = getClockDialInfo()
+                if (clockDialInfo == null) {
+                    Log.e(TAG, "表盘信息不存在，无法传输视频")
+                    transferCallback?.onTransferFailed("表盘信息不存在，请重新连接设备并等待表盘信息加载完成")
+                    return@launch
+                }
+                
+                transferCallback?.onTransferStart()
                 
                 // 构建 WatchTheme3Body 数据体
                 val watchTheme3Body = createWatchTheme3Body().apply {
@@ -181,29 +194,21 @@ class FileTransferService(
     }
     
     /**
-     * 获取默认的表盘信息
-     * 如果无法从设备获取，使用默认值（240x240方形屏幕）
+     * 获取表盘信息
+     * 从 ClockDialInfoService 获取，如果不存在则返回 null
      */
-    private fun getDefaultClockDialInfo(): SdkClockDialInfoBody {
+    private fun getClockDialInfo(): SdkClockDialInfoBody? {
         return try {
-            // 尝试从协议管理器或SDK获取设备信息
-            // 如果无法获取，使用默认值
-            SdkClockDialInfoBody().apply {
-                // 默认值：240x240方形屏幕
-                width = 240
-                height = 240
-                screenType = 0 // 0 = 方形屏幕
-                algorithm = 0 // 默认算法
+            val clockDialInfo = clockDialInfoService?.getCurrentClockDialInfo()
+            if (clockDialInfo == null) {
+                Log.w(TAG, "表盘信息不存在，请先连接设备并等待表盘信息加载完成")
+            } else {
+                Log.d(TAG, "获取到表盘信息: ${clockDialInfo.width}x${clockDialInfo.height}")
             }
+            clockDialInfo
         } catch (e: Exception) {
-            Log.w(TAG, "获取表盘信息失败，使用默认值: ${e.message}")
-            // 返回默认值
-            SdkClockDialInfoBody().apply {
-                width = 240
-                height = 240
-                screenType = 0
-                algorithm = 0
-            }
+            Log.e(TAG, "获取表盘信息失败: ${e.message}", e)
+            null
         }
     }
     

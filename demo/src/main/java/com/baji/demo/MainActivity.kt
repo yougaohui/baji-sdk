@@ -38,6 +38,7 @@ import com.baji.sdk.model.FileInfo
 import com.baji.sdk.model.ImageConvertParams
 import com.baji.sdk.model.VideoConvertParams
 import com.baji.sdk.util.BluetoothFilterUtil
+import com.blankj.utilcode.util.GsonUtils
 import com.luck.picture.lib.PictureSelector
 import com.luck.picture.lib.config.PictureConfig
 import com.permissionx.guolindev.PermissionX
@@ -111,7 +112,26 @@ class MainActivity : AppCompatActivity() {
         
         val broadcastSender = object : BroadcastSender {
             override fun sendBroadcast(event: BajiBaseEvent) {
+                Log.d(TAG, "=== BroadcastSender 发送事件 ===")
+                Log.d(TAG, "事件类型: ${event.javaClass.name}")
+                Log.d(TAG, "事件简单名称: ${event.javaClass.simpleName}")
+                Log.d(TAG, "事件对象: ${GsonUtils.toJson(event)}")
+                
+                // 如果是 ClockDialInfoEvent，打印详细信息
+                if (event is com.legend.mywatch.sdk.mywatchsdklib.android.event.ClockDialInfoEvent) {
+                    Log.d(TAG, "--- ClockDialInfoEvent 详细信息 ---")
+                    Log.d(TAG, "body: ${event.body}")
+                    try {
+                        val errorInfo = event.errorInfo
+                        Log.d(TAG, "errorInfo: $errorInfo")
+                    } catch (e: Exception) {
+                        Log.d(TAG, "errorInfo获取失败: ${e.message}")
+                    }
+                    Log.d(TAG, "--- ClockDialInfoEvent 详细信息结束 ---")
+                }
+                
                 EventBus.getDefault().post(event)
+                Log.d(TAG, "事件已通过 EventBus 发送: ${event.javaClass.simpleName}")
             }
         }
         
@@ -145,6 +165,24 @@ class MainActivity : AppCompatActivity() {
                     }
                     
                     Toast.makeText(this@MainActivity, "设备已连接: ${deviceInfo.name}", Toast.LENGTH_SHORT).show()
+                    
+                    // 连接成功后，延迟请求表盘信息
+                    // 给设备一些时间完成初始化，然后主动请求表盘信息
+                    // ClockDialInfoService 会在 ConnectStatusEvent 中自动请求
+                    // 这里也额外请求一次，确保能获取到
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        try {
+                            val clockDialInfoService = BajiSDK.getInstance().getClockDialInfoService()
+                            if (!clockDialInfoService.hasClockDialInfo()) {
+                                Log.d(TAG, "连接成功后额外请求表盘信息（延迟5秒）")
+                                clockDialInfoService.requestClockDialInfo()
+                            } else {
+                                Log.d(TAG, "表盘信息已存在，无需重新获取")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "请求表盘信息失败: ${e.message}", e)
+                        }
+                    }, 5000) // 延迟5秒，等待设备完全初始化
                 }
             }
             
@@ -452,7 +490,6 @@ class MainActivity : AppCompatActivity() {
         
         // 综合检查：设备名称和设备特征
         if (!BluetoothFilterUtil.isValidBajiDevice(manufacturerData, deviceName)) {
-            Log.d(TAG, "过滤非电子吧唧设备: $deviceName ($macAddress)")
             return
         }
         
@@ -682,8 +719,50 @@ class MainActivity : AppCompatActivity() {
     
     @Subscribe(threadMode = ThreadMode.MAIN)
     fun onEvent(event: Any) {
-        // 处理EventBus事件
-        Log.d(TAG, "收到事件: ${event.javaClass.simpleName}")
+        // 处理EventBus事件 - 打印所有收到的原始事件
+        Log.d(TAG, "=== MainActivity 收到 EventBus 事件 ===")
+        Log.d(TAG, "事件类型: ${event.javaClass.name}")
+        Log.d(TAG, "事件简单名称: ${event.javaClass.simpleName}")
+        Log.d(TAG, "事件对象: ${GsonUtils.toJson(event)}")
+
+        // 如果是 ClockDialInfoEvent，打印详细信息
+        if (event is com.legend.mywatch.sdk.mywatchsdklib.android.event.ClockDialInfoEvent) {
+            Log.d(TAG, "--- 收到 ClockDialInfoEvent 详细信息 ---")
+            Log.d(TAG, "body是否为null: ${event.body == null}")
+            if (event.body != null) {
+                val body = event.body!!
+                try {
+                    Log.d(TAG, "body.width: ${body.width}")
+                    Log.d(TAG, "body.height: ${body.height}")
+                    Log.d(TAG, "body.screenType: ${body.screenType}")
+                    Log.d(TAG, "body.algorithm: ${body.algorithm}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "读取body字段失败: ${e.message}", e)
+                }
+            }
+            try {
+                val errorInfo = event.errorInfo
+                Log.d(TAG, "errorInfo: $errorInfo")
+            } catch (e: Exception) {
+                Log.d(TAG, "errorInfo获取失败: ${e.message}")
+            }
+            Log.d(TAG, "--- ClockDialInfoEvent 详细信息结束 ---")
+        }
+        
+        // 如果是 ConnectStatusEvent，打印详细信息
+        if (event is com.legend.mywatch.sdk.mywatchsdklib.android.event.ConnectStatusEvent) {
+            Log.d(TAG, "--- 收到 ConnectStatusEvent 详细信息 ---")
+            Log.d(TAG, "status: ${event.status}")
+            Log.d(TAG, "--- ConnectStatusEvent 详细信息结束 ---")
+        }
+        
+        // 如果是 DeviceFunctionEvent，打印详细信息
+        if (event is com.legend.mywatch.sdk.mywatchsdklib.android.event.DeviceFunctionEvent) {
+            Log.d(TAG, "--- 收到 DeviceFunctionEvent 详细信息 ---")
+            Log.d(TAG, "--- DeviceFunctionEvent 详细信息结束 ---")
+        }
+        
+        Log.d(TAG, "=== MainActivity 事件处理完成 ===")
     }
     
     override fun onPause() {
