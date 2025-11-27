@@ -9,7 +9,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        minSdk 21
+        minSdk 26
         targetSdk 34
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -36,7 +36,7 @@ android {
 dependencies {
     // 使用AAR文件依赖 - 从libs目录加载所有AAR和JAR文件
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
-    implementation fileTree(dir: 'libs', include: ['*.aar'])
+//    implementation fileTree(dir: 'libs', include: ['*.aar'])
     // 如果需要明确指定某些AAR文件，可以取消注释以下行
     // 核心模块AAR
     // implementation files('libs/baji-protocol-releaseSuperband.aar')

@@ -20,7 +20,7 @@ import com.baji.sdk.model.ImageConvertParams
 import com.baji.sdk.model.VideoConvertParams
 import com.baji.demo.databinding.ActivityMainBinding
 import java.io.File
-import com.guolindev.permissionx.PermissionX
+import com.permissionx.guolindev.PermissionX
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -230,12 +230,12 @@ class MainActivity : AppCompatActivity() {
     private fun startScan() {
         deviceList.clear()
         deviceAdapter.notifyDataSetChanged()
-        BajiSDK.getInstance().getBluetoothService().startScan()
+//        BajiSDK.getInstance().getBluetoothService().startScan()
         binding.scanButton.text = getString(R.string.stop_scan)
     }
     
     private fun stopScan() {
-        BajiSDK.getInstance().getBluetoothService().stopScan()
+//        BajiSDK.getInstance().getBluetoothService().stopScan()
         binding.scanButton.text = getString(R.string.scan_devices)
     }
     

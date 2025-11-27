@@ -8,6 +8,7 @@ import com.baji.sdk.SDKConfig
 import com.baji.sdk.callback.ImageConvertCallback
 import com.baji.sdk.model.ImageConvertParams
 import com.jieli.bmp_convert.BmpConvert
+import com.jieli.bmp_convert.ConvertResult
 import com.jieli.bmp_convert.OnConvertListener
 import kotlinx.coroutines.*
 import java.io.File
@@ -169,6 +170,12 @@ class ImageConvertService(
                         } else {
                             continuation.resume(null) {}
                         }
+                    }
+
+                    override fun onStop(
+                        p0: ConvertResult?,
+                        p1: String?
+                    ) {
                     }
                 }
                 
