@@ -12,7 +12,6 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -32,12 +31,7 @@ import com.baji.sdk.BajiSDK
 import com.baji.sdk.SDKConfig
 import com.baji.sdk.callback.ConnectionCallback
 import com.baji.sdk.callback.FileTransferCallback
-import com.baji.sdk.callback.ImageConvertCallback
-import com.baji.sdk.callback.VideoConvertCallback
 import com.baji.sdk.model.DeviceInfo
-import com.baji.sdk.model.FileInfo
-import com.baji.sdk.model.ImageConvertParams
-import com.baji.sdk.model.VideoConvertParams
 import com.baji.sdk.util.BluetoothFilterUtil
 import com.blankj.utilcode.util.GsonUtils
 import com.luck.picture.lib.PictureSelector
@@ -559,112 +553,6 @@ class MainActivity : AppCompatActivity() {
             binding.syncVideoButton.isEnabled = false
         }
     }
-    
-    private fun syncImage(imagePath: String) {
-        try {
-            val file = File(imagePath)
-            if (!file.exists()) {
-                Toast.makeText(this, "图片文件不存在", Toast.LENGTH_SHORT).show()
-                return
-            }
-            
-            val filePath = file.absolutePath
-            
-            // 转换图片（如果需要）
-            val imageService = BajiSDK.getInstance().getImageConvertService()
-            imageService.setConvertCallback(object : ImageConvertCallback {
-                override fun onConvertSuccess(outputPath: String) {
-                    // 上传转换后的图片
-                    val fileService = BajiSDK.getInstance().getFileTransferService()
-                    fileService.uploadFile(outputPath, FileInfo.FileType.IMAGE)
-                }
-                
-                override fun onConvertFailed(error: String) {
-                    runOnUiThread {
-                        Toast.makeText(this@MainActivity, "图片转换失败: $error", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
-            
-            // 转换图片为设备格式（240x240, bin格式）
-            val params = ImageConvertParams(
-                targetWidth = 240,
-                targetHeight = 240,
-                quality = 90,
-                outputFormat = ImageConvertParams.ImageFormat.BIN,
-                algorithm = 0
-            )
-            
-            val outputPath = getExternalFilesDir(null)?.absolutePath + "/converted_image_${System.currentTimeMillis()}.bin"
-            imageService.convertImage(filePath, outputPath, params)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "同步图片失败: ${e.message}", e)
-            Toast.makeText(this, "同步图片失败: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    private fun syncVideo(uri: Uri) {
-        try {
-            // 将URI内容复制到临时文件
-            val tempFile = File(getExternalFilesDir(null), "temp_video_${System.currentTimeMillis()}.mp4")
-            contentResolver.openInputStream(uri)?.use { input ->
-                tempFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-            
-            val filePath = tempFile.absolutePath
-            
-            // 转换视频为AVI格式
-            val videoService = BajiSDK.getInstance().getVideoConvertService()
-            videoService.setConvertCallback(object : VideoConvertCallback {
-                override fun onConvertStart() {
-                    runOnUiThread {
-                        binding.syncProgress.visibility = View.VISIBLE
-                        binding.syncProgress.progress = 0
-                        binding.syncStatusText.text = "正在转换视频..."
-                    }
-                }
-                
-                override fun onConvertProgress(progress: Int) {
-                    runOnUiThread {
-                        binding.syncProgress.progress = progress
-                        binding.syncStatusText.text = "转换进度: $progress%"
-                    }
-                }
-                
-                override fun onConvertSuccess(outputPath: String) {
-                    // 上传转换后的视频
-                    val fileService = BajiSDK.getInstance().getFileTransferService()
-                    fileService.uploadFile(outputPath, FileInfo.FileType.VIDEO)
-                }
-                
-                override fun onConvertFailed(error: String) {
-                    runOnUiThread {
-                        binding.syncProgress.visibility = View.GONE
-                        Toast.makeText(this@MainActivity, "视频转换失败: $error", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            })
-            
-            // 转换视频为AVI格式（240x240, 5fps）
-            val params = VideoConvertParams(
-                targetWidth = 240,
-                targetHeight = 240,
-                fps = 5,
-                quality = 3
-            )
-            
-            val outputPath = getExternalFilesDir(null)?.absolutePath + "/converted_video_${System.currentTimeMillis()}.avi"
-            videoService.convertToAVI(filePath, outputPath, params)
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "同步视频失败: ${e.message}", e)
-            Toast.makeText(this, "同步视频失败: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
-    }
-    
     
     /**
      * 设置图片同步ViewModel的回调

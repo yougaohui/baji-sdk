@@ -6,6 +6,8 @@ import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
@@ -56,6 +58,9 @@ class VideoCutActivity : AppCompatActivity() {
     private var timer: Timer? = null
     private var timerTaskImp: TimerTaskImp? = null
     private var loadingDialog: AlertDialog? = null
+    private var progressDialog: AlertDialog? = null
+    private var progressBar: ProgressBar? = null
+    private var progressPercentText: TextView? = null
     private lateinit var mCacheRootPath: String
     private lateinit var outDir: String
     
@@ -363,42 +368,56 @@ class VideoCutActivity : AppCompatActivity() {
         videoService?.setConvertCallback(object : VideoConvertCallback {
             override fun onConvertStart() {
                 Log.d(TAG, "视频转换开始")
+                runOnUiThread {
+                    loadingDialog?.setMessage("正在转换视频: 0%")
+                }
             }
             
             override fun onConvertProgress(progress: Int) {
                 Log.d(TAG, "视频转换进度: $progress%")
+                runOnUiThread {
+                    loadingDialog?.setMessage("正在转换视频: $progress%")
+                }
             }
             
             override fun onConvertSuccess(outputPath: String) {
                 Log.d(TAG, "视频转换成功: $outputPath")
-                loadingDialog?.dismiss()
+                runOnUiThread {
+                    loadingDialog?.dismiss()
+                }
                 
                 // 上传视频
                 val fileService = BajiSDK.getInstance().getFileTransferService()
                 fileService?.setTransferCallback(object : FileTransferCallback {
                     override fun onTransferStart() {
                         Log.d(TAG, "视频上传开始")
-                        loadingDialog = AlertDialog.Builder(this@VideoCutActivity)
-                            .setMessage("正在上传视频...")
-                            .setCancelable(false)
-                            .show()
+                        runOnUiThread {
+                            showProgressDialog()
+                        }
                     }
                     
                     override fun onTransferProgress(progress: Int, bytesTransferred: Long, totalBytes: Long) {
-                        Log.d(TAG, "视频上传进度: $progress%")
+                        Log.d(TAG, "视频上传进度: $progress% ($bytesTransferred/$totalBytes bytes)")
+                        runOnUiThread {
+                            updateProgress(progress)
+                        }
                     }
                     
                     override fun onTransferSuccess() {
                         Log.d(TAG, "视频上传成功")
-                        loadingDialog?.dismiss()
-                        Toast.makeText(this@VideoCutActivity, "视频上传成功", Toast.LENGTH_SHORT).show()
-                        finish()
+                        runOnUiThread {
+                            dismissProgressDialog()
+                            Toast.makeText(this@VideoCutActivity, "视频上传成功", Toast.LENGTH_SHORT).show()
+                            finish()
+                        }
                     }
                     
                     override fun onTransferFailed(error: String) {
                         Log.e(TAG, "视频上传失败: $error")
-                        loadingDialog?.dismiss()
-                        Toast.makeText(this@VideoCutActivity, "视频上传失败: $error", Toast.LENGTH_SHORT).show()
+                        runOnUiThread {
+                            dismissProgressDialog()
+                            Toast.makeText(this@VideoCutActivity, "视频上传失败: $error", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 })
                 
@@ -459,6 +478,62 @@ class VideoCutActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * 显示进度对话框
+     */
+    private fun showProgressDialog() {
+        try {
+            val view = LayoutInflater.from(this).inflate(R.layout.dialog_progress, null)
+            progressBar = view.findViewById(R.id.progressBar)
+            progressPercentText = view.findViewById(R.id.progressPercent)
+            val progressMessage = view.findViewById<TextView>(R.id.progressMessage)
+            
+            progressMessage?.text = "正在上传视频..."
+            progressBar?.progress = 0
+            progressPercentText?.text = "0%"
+            
+            progressDialog = AlertDialog.Builder(this)
+                .setView(view)
+                .setCancelable(false)
+                .create()
+            
+            progressDialog?.show()
+        } catch (e: Exception) {
+            Log.e(TAG, "显示进度对话框失败: ${e.message}", e)
+            // 如果创建进度对话框失败，使用简单的加载对话框
+            loadingDialog = AlertDialog.Builder(this)
+                .setMessage("正在上传视频...")
+                .setCancelable(false)
+                .show()
+        }
+    }
+    
+    /**
+     * 更新进度
+     */
+    private fun updateProgress(progress: Int) {
+        try {
+            progressBar?.progress = progress
+            progressPercentText?.text = "$progress%"
+        } catch (e: Exception) {
+            Log.e(TAG, "更新进度失败: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * 关闭进度对话框
+     */
+    private fun dismissProgressDialog() {
+        try {
+            progressDialog?.dismiss()
+            progressDialog = null
+            progressBar = null
+            progressPercentText = null
+        } catch (e: Exception) {
+            Log.e(TAG, "关闭进度对话框失败: ${e.message}", e)
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
         timer?.cancel()
@@ -466,6 +541,7 @@ class VideoCutActivity : AppCompatActivity() {
         mp?.release()
         mp = null
         loadingDialog?.dismiss()
+        dismissProgressDialog()
         
         // 清理临时文件
         try {
