@@ -40,6 +40,8 @@ android {
 }
 
 dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
     // 依赖SDK模块
     implementation project(':sdk')
     

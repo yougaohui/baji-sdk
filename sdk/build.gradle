@@ -34,15 +34,18 @@ android {
 }
 
 dependencies {
-    // 通过本地路径依赖现有项目模块
-    def projectRoot = file('../..').absolutePath
-    def electronicBadgePath = new File(projectRoot, 'electronic-badge').absolutePath
+    // 使用AAR文件依赖 - 从libs目录加载所有AAR和JAR文件
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
     
-    // 依赖现有项目的模块
-    implementation project(':baji-protocol')
-    implementation project(':ota-module')
-    implementation project(':network-module')
-    implementation project(':commonlib')
+    // 如果需要明确指定某些AAR文件，可以取消注释以下行
+    // 核心模块AAR
+    // implementation files('libs/baji-protocol-releaseSuperband.aar')
+    // implementation files('libs/ota-module-releaseSuperband.aar')
+    // implementation files('libs/network-module-releaseSuperband.aar')
+    // implementation files('libs/commonlib-releaseSuperband.aar')
+    
+    // FFmpeg - 如果libs中没有ffmpeg AAR，使用Maven依赖
+    // implementation 'com.arthenica:ffmpeg-kit-full:6.0-2.LTS'
     
     // Android 核心库
     implementation 'androidx.core:core-ktx:1.12.0'
@@ -51,9 +54,6 @@ dependencies {
     
     // 协程支持
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
-    
-    // FFmpeg for video conversion
-    implementation 'com.arthenica:ffmpeg-kit-full:6.0-2.LTS'
     
     // 网络请求
     implementation 'com.squareup.okhttp3:okhttp:3.12.9'
