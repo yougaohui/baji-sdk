@@ -38,8 +38,7 @@
         </activity>
         <activity
             android:name=".ui.VideoCutActivity"
-            android:exported="false"
-            android:screenOrientation="landscape" />
+            android:exported="false" />
     </application>
 
 </manifest>
