@@ -36,17 +36,6 @@ android {
 dependencies {
     // 使用AAR文件依赖 - 从libs目录加载所有AAR和JAR文件
     implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
-//    implementation fileTree(dir: 'libs', include: ['*.aar'])
-    // 如果需要明确指定某些AAR文件，可以取消注释以下行
-    // 核心模块AAR
-    // implementation files('libs/baji-protocol-releaseSuperband.aar')
-    // implementation files('libs/ota-module-releaseSuperband.aar')
-    // implementation files('libs/network-module-releaseSuperband.aar')
-    // implementation files('libs/commonlib-releaseSuperband.aar')
-    
-    // FFmpeg - 如果libs中没有ffmpeg AAR，使用Maven依赖
-    // implementation 'com.arthenica:ffmpeg-kit-full:6.0-2.LTS'
-    
     // Android 核心库
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
