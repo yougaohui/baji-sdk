@@ -1,4 +1,4 @@
 jdk:
   - openjdk17
 install:
-  - ./gradlew :sdk:assembleRelease :sdk:generatePomFileForReleasePublication --no-daemon
+  - ./gradlew :sdk:assembleRelease :sdk:generatePomFileForReleasePublication --no-daemon -x :demo:compileDebugKotlin -x :demo:compileReleaseKotlin -x :demo:processDebugResources -x :demo:processReleaseResources -x :demo:build -x :demo:assembleDebug -x :demo:assembleRelease
