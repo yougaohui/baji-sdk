@@ -35,11 +35,40 @@
 
 ```gradle
 dependencies {
+    // SDK AAR文件
     implementation files('path/to/baji-sdk-release.aar')
     // 或者通过Maven仓库
     // implementation 'com.baji:sdk:1.0.0'
+    
+    // SDK必须依赖的第三方库
+    // Android 核心库
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    
+    // Kotlin协程
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    
+    // 网络请求
+    implementation 'com.squareup.okhttp3:okhttp:3.12.9'
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.retrofit2:adapter-rxjava2:2.9.0'
+    implementation 'io.reactivex.rxjava2:rxandroid:2.1.1'
+    implementation 'io.reactivex.rxjava2:rxjava:2.2.18'
+    
+    // JSON解析
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // 工具库
+    api 'com.blankj:utilcodex:1.31.1'
+    
+    // 事件总线（SDK内部使用EventBus进行事件分发）
+    implementation 'org.greenrobot:eventbus:3.3.1'
 }
 ```
+
+**注意**：SDK必须依赖以上第三方库才能正常工作。如果您的项目中已经包含这些库，请确保版本兼容。建议使用与SDK相同的版本以避免兼容性问题。
 
 ### 2. 初始化SDK
 
