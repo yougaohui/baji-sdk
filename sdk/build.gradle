@@ -2,6 +2,7 @@ plugins {
     id 'com.android.library'
     id 'org.jetbrains.kotlin.android'
     id 'kotlin-parcelize'
+    id 'maven-publish'
 }
 
 android {
@@ -18,7 +19,7 @@ android {
 
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -65,5 +66,60 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+// Maven发布配置
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                
+                groupId = 'com.baji'
+                artifactId = 'sdk'
+                version = '1.0.0'
+                
+                // 不发布源码jar，只发布AAR
+                // 通过不配置sourcesJar任务来实现
+                
+                pom {
+                    name = 'Baji SDK'
+                    description = '电子吧唧SDK - 提供蓝牙连接、OTA升级、视频转换、图片转换、表盘管理和文件传输等功能'
+                    url = 'https://github.com/yougaohui/baji-sdk'
+                    
+                    licenses {
+                        license {
+                            name = 'The Apache License, Version 2.0'
+                            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        }
+                    }
+                    
+                    developers {
+                        developer {
+                            id = 'baji'
+                            name = 'Baji Team'
+                        }
+                    }
+                    
+                    scm {
+                        connection = 'scm:git:git://github.com/yougaohui/baji-sdk.git'
+                        developerConnection = 'scm:git:ssh://github.com:yougaohui/baji-sdk.git'
+                        url = 'https://github.com/yougaohui/baji-sdk'
+                    }
+                }
+            }
+        }
+        
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/yougaohui/baji-sdk")
+                credentials {
+                    username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
+                    password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
+                }
+            }
+        }
+    }
 }
 

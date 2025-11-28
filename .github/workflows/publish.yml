@@ -1,0 +1,70 @@
+name: Publish SDK to GitHub Packages
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'SDK Version (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up JDK
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" == "release" ]; then
+          VERSION="${{ github.event.release.tag_name }}"
+          # 移除v前缀（如果有）
+          VERSION=${VERSION#v}
+        else
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Publishing version: $VERSION"
+    
+    - name: Update version in build.gradle
+      run: |
+        sed -i "s/version = '.*'/version = '${{ steps.version.outputs.version }}'/" sdk/build.gradle
+        echo "Updated version in sdk/build.gradle:"
+        grep "version = " sdk/build.gradle
+    
+    - name: Build Release AAR
+      run: ./gradlew :sdk:assembleRelease
+    
+    - name: Publish to GitHub Packages
+      env:
+        GITHUB_USERNAME: ${{ github.repository_owner }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: ./gradlew :sdk:publishReleasePublicationToGitHubPackagesRepository
+    
+    - name: Publish Summary
+      run: |
+        echo "✅ SDK published successfully!"
+        echo "Version: ${{ steps.version.outputs.version }}"
+        echo "Repository: https://maven.pkg.github.com/yougaohui/baji-sdk"
+        echo "Dependency: com.baji:sdk:${{ steps.version.outputs.version }}"
+

@@ -31,14 +31,63 @@
 
 ### 1. 添加依赖
 
-在您的项目 `build.gradle` 中添加：
+#### 方式一：通过Maven仓库（推荐）
+
+在项目根目录的 `build.gradle` 或 `settings.gradle` 中添加GitHub Packages仓库：
+
+```gradle
+repositories {
+    maven {
+        name = "GitHubPackages"
+        url = uri("https://maven.pkg.github.com/yougaohui/baji-sdk")
+        credentials {
+            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
+            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
+        }
+    }
+}
+```
+
+**配置GitHub认证**：
+
+1. 创建GitHub Personal Access Token：
+   - 前往 GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
+   - 生成新token，勾选 `write:packages` 和 `read:packages` 权限
+
+2. 配置认证（推荐使用环境变量，无需修改项目文件）：
+   ```bash
+   # Windows (PowerShell)
+   $env:GITHUB_USERNAME="yougaohui"
+   $env:GITHUB_TOKEN="your_github_token"
+   
+   # Windows (CMD)
+   set GITHUB_USERNAME=yougaohui
+   set GITHUB_TOKEN=your_github_token
+   
+   # Linux/Mac
+   export GITHUB_USERNAME=yougaohui
+   export GITHUB_TOKEN=your_github_token
+   ```
+   
+   **注意**：也可以使用 `local.properties` 文件配置，但使用环境变量更简单，无需修改项目文件。
+
+在您的项目 `build.gradle` 中添加依赖：
+
+```gradle
+dependencies {
+    // 通过Maven仓库引入SDK（推荐）
+    implementation 'com.baji:sdk:1.0.0'
+}
+```
+
+#### 方式二：使用本地AAR文件
+
+如果您不想使用Maven仓库，也可以直接使用AAR文件：
 
 ```gradle
 dependencies {
     // SDK AAR文件
     implementation files('path/to/baji-sdk-release.aar')
-    // 或者通过Maven仓库
-    // implementation 'com.baji:sdk:1.0.0'
     
     // SDK必须依赖的第三方库
     // Android 核心库
@@ -691,6 +740,83 @@ SDK需要以下权限，请在 `AndroidManifest.xml` 中添加：
 3. **资源清理**: 在应用退出时调用 `BajiSDK.getInstance().cleanup()` 清理资源
 4. **数据库**: SDK不包含数据库相关功能，数据存储由应用自行管理
 5. **EventBus**: SDK内部使用EventBus进行事件分发，请确保项目中已添加EventBus依赖
+
+## 发布SDK到Maven仓库
+
+### 使用GitHub Actions自动发布（推荐）
+
+SDK已配置GitHub Actions工作流，可以自动发布到GitHub Packages，**无需任何本地配置**。
+
+#### 发布方式
+
+**方式一：通过创建GitHub Release发布（推荐）**
+
+1. 在 `sdk/build.gradle` 中更新版本号（如：`version = '1.0.1'`）
+2. 提交并推送代码到GitHub
+3. 在GitHub仓库页面：
+   - 点击右侧 "Releases" > "Create a new release"
+   - 输入版本标签（如：`v1.0.1`，会自动移除v前缀）
+   - 填写Release标题和描述
+   - 点击 "Publish release"
+4. GitHub Actions会自动触发，构建并发布SDK到GitHub Packages
+
+**方式二：手动触发发布**
+
+1. 在 `sdk/build.gradle` 中更新版本号
+2. 提交并推送代码到GitHub
+3. 在GitHub仓库页面：
+   - 点击 "Actions" 标签页
+   - 选择 "Publish SDK to GitHub Packages" 工作流
+   - 点击 "Run workflow"
+   - 输入版本号（如：`1.0.1`）
+   - 点击 "Run workflow" 按钮
+4. 等待工作流完成，SDK会自动发布
+
+#### 优势
+
+- ✅ **无需本地配置**：不需要配置GitHub Token或环境变量
+- ✅ **自动版本管理**：通过Release标签或手动输入版本号
+- ✅ **自动代码混淆**：Release构建会自动启用ProGuard混淆
+- ✅ **安全可靠**：使用GitHub内置的 `GITHUB_TOKEN`，无需管理密钥
+
+#### 查看发布结果
+
+发布成功后，可以在以下位置查看：
+- GitHub Packages：`https://github.com/yougaohui/baji-sdk/packages`
+- Maven仓库：`https://maven.pkg.github.com/yougaohui/baji-sdk`
+
+#### 仓库信息
+
+- 仓库地址：`https://github.com/yougaohui/baji-sdk`
+- Maven仓库地址：`https://maven.pkg.github.com/yougaohui/baji-sdk`
+- Group ID：`com.baji`
+- Artifact ID：`sdk`
+
+### 源码保护
+
+SDK发布配置已确保：
+- ✅ **不发布源码jar**：只发布编译后的AAR文件
+- ✅ **代码混淆**：release构建自动启用ProGuard混淆
+- ✅ **敏感信息保护**：`.gitignore` 已配置，不会提交token等敏感信息
+
+### 版本管理
+
+发布新版本的标准流程：
+
+1. **更新版本号**：在 `sdk/build.gradle` 中修改 `version` 字段（如：`version = '1.0.1'`）
+2. **更新文档**：在 `README.md` 的版本历史中添加新版本说明
+3. **提交代码**：
+   ```bash
+   git add .
+   git commit -m "Release version 1.0.1"
+   git push origin main
+   ```
+4. **创建GitHub Release**：
+   - 在GitHub仓库页面创建Release
+   - 版本标签使用 `v1.0.1`（带v前缀，GitHub Actions会自动处理）
+   - GitHub Actions会自动构建并发布SDK
+
+**注意**：如果使用手动触发方式，版本号会在工作流运行时自动更新到 `build.gradle` 中。
 
 ## 版本历史
 
