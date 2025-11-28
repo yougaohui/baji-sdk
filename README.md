@@ -701,6 +701,7 @@ imageService.convertImage(
 )
 
 // 4. 转换视频
+// 注意：目前设备仅支持AVI格式视频播放
 val videoParams = VideoConvertParams(
     targetWidth = targetWidth,
     targetHeight = targetHeight,
@@ -712,6 +713,18 @@ videoService.convertToAVI(
     inputPath = "/path/to/input.mp4",
     outputPath = "/path/to/output.avi",
     params = videoParams
+)
+
+// 辅助功能：AVI转MP4（用于在手机上预览）
+videoService.convertAVIToMP4(
+    aviPath = "/path/to/input.avi",
+    mp4Path = "/path/to/output.mp4"
+)
+
+// 辅助功能：AVI转GIF（用于在手机上预览）
+videoService.convertAVIToGIF(
+    aviPath = "/path/to/input.avi",
+    gifPath = "/path/to/output.gif"
 )
 ```
 
