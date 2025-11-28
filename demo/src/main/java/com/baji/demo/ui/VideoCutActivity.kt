@@ -279,6 +279,23 @@ class VideoCutActivity : AppCompatActivity() {
         mRangeSeekBarView.setSelectedMinValue(mMinTime)
         mRangeSeekBarView.setSelectedMaxValue(mMaxTime)
         mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+        mRangeSeekBarView.setNotifyWhileDragging(true)
+        mRangeSeekBarView.setOnRangeSeekBarChangeListener(object : RangeSeekBarView.OnRangeSeekBarChangeListener {
+            override fun onRangeSeekBarValuesChanged(
+                bar: RangeSeekBarView,
+                minValue: Long,
+                maxValue: Long,
+                action: Int,
+                isMin: Boolean,
+                pressedThumb: RangeSeekBarView.Thumb
+            ) {
+                Log.d(TAG, "范围改变: mMinTime = $minValue, mMaxTime = $maxValue")
+                mMinTime = minValue
+                mMaxTime = maxValue
+                mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+                reStartVideo()
+            }
+        })
     }
     
     private fun startTimer() {
