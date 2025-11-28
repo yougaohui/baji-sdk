@@ -31,7 +31,50 @@
 
 ### 1. 添加依赖
 
-#### 方式一：通过Maven仓库（推荐）
+#### 方式一：通过JitPack（推荐，最简单）
+
+**无需任何认证配置，直接使用！**
+
+在项目根目录的 `settings.gradle` 或 `build.gradle` 中添加JitPack仓库：
+
+```gradle
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }  // 添加这一行
+    }
+}
+```
+
+或者如果使用传统的 `build.gradle`：
+
+```gradle
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }  // 添加这一行
+    }
+}
+```
+
+在您的项目 `build.gradle` 中添加依赖：
+
+```gradle
+dependencies {
+    // 通过JitPack引入SDK（推荐，无需认证）
+    implementation 'com.github.yougaohui:baji-sdk:v1.0.0'
+}
+```
+
+**版本说明**：
+- 使用Release标签：`v1.0.0`、`v1.0.1` 等
+- 使用分支：`-SNAPSHOT`（如 `master-SNAPSHOT`）
+- 使用提交哈希：`abc1234`（前7位）
+
+#### 方式二：通过GitHub Packages
 
 在项目根目录的 `build.gradle` 或 `settings.gradle` 中添加GitHub Packages仓库：
 
@@ -54,33 +97,27 @@ repositories {
    - 前往 GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
    - 生成新token，勾选 `write:packages` 和 `read:packages` 权限
 
-2. 配置认证（推荐使用环境变量，无需修改项目文件）：
+2. 配置认证（推荐使用环境变量）：
    ```bash
    # Windows (PowerShell)
    $env:GITHUB_USERNAME="yougaohui"
    $env:GITHUB_TOKEN="your_github_token"
    
-   # Windows (CMD)
-   set GITHUB_USERNAME=yougaohui
-   set GITHUB_TOKEN=your_github_token
-   
    # Linux/Mac
    export GITHUB_USERNAME=yougaohui
    export GITHUB_TOKEN=your_github_token
    ```
-   
-   **注意**：也可以使用 `local.properties` 文件配置，但使用环境变量更简单，无需修改项目文件。
 
 在您的项目 `build.gradle` 中添加依赖：
 
 ```gradle
 dependencies {
-    // 通过Maven仓库引入SDK（推荐）
+    // 通过GitHub Packages引入SDK
     implementation 'com.baji:sdk:1.0.0'
 }
 ```
 
-#### 方式二：使用本地AAR文件
+#### 方式三：使用本地AAR文件
 
 如果您不想使用Maven仓库，也可以直接使用AAR文件：
 
