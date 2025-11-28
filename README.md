@@ -299,6 +299,8 @@ otaService.setUpgradeCallback(object : OTAUpgradeCallback {
     
     override fun onUpgradeFailed(error: String) {
         Log.e("App", "升级失败: $error")
+        // 错误信息可能包含错误码，需要解析并显示对应的错误说明
+        // 参考下面的错误码说明
     }
 })
 
@@ -307,6 +309,169 @@ otaService.checkUpgrade()
 
 // 启动升级
 otaService.startUpgrade("/path/to/ota/file.bin")
+```
+
+#### OTA升级错误码说明
+
+当OTA升级失败时，`onUpgradeFailed` 回调中的 `error` 参数可能包含错误码。以下是OTA升级相关的错误码及其含义：
+
+##### OTA升级错误码 (256-282)
+
+| 错误码 | 说明 | 可能原因 |
+|--------|------|----------|
+| 256 | 无法连接进入OTA模式的设备 | 1. 广播环境极其差<br>2. Android设备与Ble设备连接走了BR/EDR通道<br>3. Android设备Bluedroid异常 |
+| 257 | 文件读取IO错误 | I/O问题，概率极低 |
+| 258 | 启动搜索服务失败 | Bluedroid异常，概率极低 |
+| 259 | 调用Java同步锁异常 | Java问题，概率极低 |
+| 260 | 连接无回调 | 1. 可能其他应用在对同一设备做连接动作<br>2. Bluedroid异常，概率极低 |
+| 261 | 发送command无回调 | 1. 发送command过程中断线<br>2. Android4.4系统可能需要patch版本9377以上或Android5.0以上 |
+| 262 | 服务不匹配 | 连到了异常设备，概率极低 |
+| 263 | 特性不匹配 | 连到了异常设备，概率极低 |
+| 264 | 建立LE连接失败 | 建立LE连接失败 |
+| 265 | 无法scan到设备 | 1. 广播环境极其差<br>2. 设备未进入OTA模式<br>3. [BLE]请检查是否开启定位功能 |
+| 266 | 无法使能notification | Bluedroid异常，概率极低 |
+| 267 | 发送数据失败 | 连接断开 |
+| 268 | 重发次数达上限 | Bluedroid异常，概率极低 |
+| 269 | 对端电池电量低 | 对端设备电量低 |
+| 270 | 读取bank区信息失败 | Bluedroid异常，概率极低 |
+| 271 | 读取App信息失败 | Bluedroid异常，概率极低 |
+| 272 | 读取Patch信息失败 | Bluedroid异常，概率极低 |
+| 273 | 读取image版本信息失败 | 读取image版本信息失败 |
+| 274 | 用户不激活文件更新 | 在静默升级中用户不激活更新触发 |
+| 275 | Buffer校验重传次数达到最大值 | 出现大量的517错误 |
+| 276 | 交换MTU失败 | 交换MTU失败 |
+| 277 | 读取设备MAC地址失败 | 读取设备MAC地址失败 |
+| 278 | 版本检查失败 | 1. 固件app版本太低<br>2. 固件patch版本太低<br>3. 固件patch extension版本太低 |
+| 279 | 发送命令失败 | 1. [GATT] 读取characteristic失败<br>2. [USB] controlTransfer失败 |
+| 280 | 进入OTA模式失败 | 发送指令失败 |
+| 281 | 不支持OTA Over SPP功能 | 设备不支持OTA Over SPP功能 |
+| 282 | RWS OTA未准备完毕 | RWS OTA未准备完毕 |
+
+##### 其他错误码
+
+| 错误码 | 说明 | 可能原因 |
+|--------|------|----------|
+| 514 | 参数无效 | 传入的参数无效 |
+| 517 | CRC校验失败 | 1. CRC校验失败(丢包，建议限速)<br>2. 更新连接参数失败 |
+| 520 | Flash erase error | Flash擦除错误 |
+| 766 | 指令不支持 | 设备不支持该指令 |
+| 767 | 未收到对端notification | 1. 秘钥不匹配<br>2. 对端设备Config内存分配有问题 |
+| 4097 | 加载镜像文件失败 | 加载镜像文件失败 |
+| 4098 | 加载文件失败 | 加载文件失败 |
+| 4112 | 设备地址无效 | 设备地址无效 |
+| 4113 | 密钥无效 | 密钥无效 |
+| 4114 | 配置无效 | 配置无效 |
+| 4128 | 升级中断 | 升级操作被中断 |
+
+##### OTA升级错误处理建议
+
+1. **电量相关错误 (269)**: 提示用户充电后再试
+2. **连接相关错误 (256, 260, 264, 265)**: 检查设备连接状态，重新连接后重试
+3. **文件相关错误 (257, 4097, 4098)**: 检查OTA文件是否存在和完整
+4. **校验相关错误 (517)**: 重新下载OTA文件或检查网络连接
+5. **版本相关错误 (278)**: 检查设备固件版本是否满足要求
+
+```kotlin
+// OTA升级错误处理示例
+override fun onUpgradeFailed(error: String) {
+    // 尝试从错误信息中提取错误码
+    val errorCode = extractErrorCode(error)
+    
+    when (errorCode) {
+        269 -> {
+            // 电量不足
+            Toast.makeText(context, "设备电量不足，请充电后再试", Toast.LENGTH_LONG).show()
+        }
+        256, 260, 264, 265 -> {
+            // 连接问题
+            Toast.makeText(context, "设备连接异常，请重新连接后重试", Toast.LENGTH_LONG).show()
+        }
+        517 -> {
+            // 校验失败
+            Toast.makeText(context, "文件校验失败，请重新下载", Toast.LENGTH_LONG).show()
+        }
+        else -> {
+            // 其他错误
+            Toast.makeText(context, "OTA升级失败: $error", Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private fun extractErrorCode(error: String): Int? {
+    // 从错误信息中提取错误码（根据实际错误信息格式实现）
+    val regex = Regex("error[\\s:]*code[\\s:]*([0-9]+)", RegexOption.IGNORE_CASE)
+    return regex.find(error)?.groupValues?.get(1)?.toIntOrNull()
+}
+```
+
+#### 表盘升级错误码说明
+
+当表盘升级失败时，错误回调中可能包含错误码。以下是表盘升级相关的错误码及其含义：
+
+##### 本地错误码 (1000-1015)
+
+| 错误码 | 说明 | 可能原因 |
+|--------|------|----------|
+| 1000 | 正在升级中 | 升级操作正在进行，请勿重复调用 |
+| 1001 | 超时 | 升级操作超时 |
+| 1002 | 重试超时 | 重试操作超时 |
+| 1003 | 校验错误 | 文件校验失败 |
+| 1004 | 镜像固件不存在 | 镜像固件文件不存在 |
+| 1005 | 字体固件不存在 | 字体固件文件不存在 |
+| 1006 | 设备断开连接 | 升级过程中设备断开连接 |
+| 1007 | 未知错误 | 未知的错误类型 |
+| 1008 | 电量低 | 设备电量过低 |
+| 1009 | 充电状态异常 | 设备充电状态异常 |
+| 1010 | 空间不足 | 设备存储空间不足 |
+| 1011 | 表盘数量超限 | 表盘数量超过限制 |
+| 1012 | 重复升级 | 正在升级中 |
+| 1013 | 表盘ID未找到 | 指定的表盘ID不存在 |
+| 1014 | 升级已停止 | 升级操作被停止 |
+| 1015 | 升级过于频繁 | 升级操作过于频繁 |
+
+##### 表盘升级错误处理建议
+
+1. **电量相关错误 (1008)**: 提示用户充电后再试
+2. **连接相关错误 (1006)**: 检查设备连接状态，重新连接后重试
+3. **文件相关错误 (1004, 1005)**: 检查表盘文件是否存在和完整
+4. **校验相关错误 (1003)**: 重新下载表盘文件或检查网络连接
+5. **频繁操作错误 (1015)**: 提示用户稍后再试
+6. **表盘相关错误 (1011, 1013)**: 检查表盘ID是否正确，表盘数量是否超限
+
+```kotlin
+// 表盘升级错误处理示例
+override fun onUpgradeFailed(errorCode: Int, error: String) {
+    when (errorCode) {
+        1008 -> {
+            // 电量不足
+            Toast.makeText(context, "设备电量不足，请充电后再试", Toast.LENGTH_LONG).show()
+        }
+        1006 -> {
+            // 连接问题
+            Toast.makeText(context, "设备连接异常，请重新连接后重试", Toast.LENGTH_LONG).show()
+        }
+        1003 -> {
+            // 校验失败
+            Toast.makeText(context, "文件校验失败，请重新下载", Toast.LENGTH_LONG).show()
+        }
+        1013 -> {
+            // 表盘ID未找到
+            Toast.makeText(context, "表盘ID不存在，请检查表盘信息", Toast.LENGTH_LONG).show()
+        }
+        1011 -> {
+            // 表盘数量超限
+            Toast.makeText(context, "表盘数量已满，请先删除部分表盘", Toast.LENGTH_LONG).show()
+        }
+        1015 -> {
+            // 升级过于频繁
+            Toast.makeText(context, "升级操作过于频繁，请稍后再试", Toast.LENGTH_LONG).show()
+        }
+        else -> {
+            // 其他错误
+            Toast.makeText(context, "表盘升级失败: $error", Toast.LENGTH_LONG).show()
+        }
+    }
+}
 ```
 
 ### 8. 使用文件传输服务
