@@ -298,14 +298,23 @@ class VideoCutActivity : AppCompatActivity() {
         mRangeSeekBarView.setSelectedMaxValue(mMaxTime)
         mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
         mRangeSeekBarView.setNotifyWhileDragging(true)
-        mRangeSeekBarView.setOnRangeSeekBarChangeListener { bar, minValue, maxValue, action, isMin, pressedThumb ->
-            Log.d(TAG, "RangeSeekBar拖动: minValue=$minValue, maxValue=$maxValue, mFirstPosition=$mFirstPosition")
-            // 根据第一个可见项的位置调整时间范围
-            mMinTime = minValue + mFirstPosition * 1000L
-            mMaxTime = maxValue + mFirstPosition * 1000L
-            mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
-            reStartVideo()
-        }
+        mRangeSeekBarView.setOnRangeSeekBarChangeListener(object : com.baji.demo.view.RangeSeekBarView.OnRangeSeekBarChangeListener {
+            override fun onRangeSeekBarValuesChanged(
+                bar: com.baji.demo.view.RangeSeekBarView,
+                minValue: Long,
+                maxValue: Long,
+                action: Int,
+                isMin: Boolean,
+                pressedThumb: com.baji.demo.view.RangeSeekBarView.Thumb
+            ) {
+                Log.d(TAG, "RangeSeekBar拖动: minValue=$minValue, maxValue=$maxValue, mFirstPosition=$mFirstPosition")
+                // 根据第一个可见项的位置调整时间范围
+                mMinTime = minValue + mFirstPosition * 1000L
+                mMaxTime = maxValue + mFirstPosition * 1000L
+                mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+                reStartVideo()
+            }
+        })
     }
 
     private fun startTimer() {
