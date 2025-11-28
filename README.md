@@ -65,10 +65,29 @@ dependencies {
     
     // 事件总线（SDK内部使用EventBus进行事件分发）
     implementation 'org.greenrobot:eventbus:3.3.1'
+    
+    // SDK依赖的AAR文件（需要主项目提供）
+    // 将SDK libs目录下的AAR文件复制到主项目的libs目录，然后添加依赖
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+    // 或者单独指定每个AAR文件
+    // implementation files('libs/baji-protocol-releaseSuperband.aar')
+    // implementation files('libs/ota-module-releaseSuperband.aar')
+    // implementation files('libs/network-module-releaseSuperband.aar')
+    // implementation files('libs/commonlib-releaseSuperband.aar')
+    // implementation files('libs/jl_bluetooth_connect_V1.3.5_10312-release.aar')
+    // implementation files('libs/jl_bt_ota_V1.10.0_10932-release.aar')
+    // implementation files('libs/jl_rcsp_V0.7.2_527-release.aar')
+    // implementation files('libs/JL_Watch_V1.13.1_11214-release.aar')
+    // implementation files('libs/mywatch_V1.0.3_debug_20251105.aar')
+    // ... 其他AAR文件
 }
 ```
 
-**注意**：SDK必须依赖以上第三方库才能正常工作。如果您的项目中已经包含这些库，请确保版本兼容。建议使用与SDK相同的版本以避免兼容性问题。
+**重要说明**：
+
+1. **第三方库依赖**：SDK必须依赖以上第三方库才能正常工作。如果您的项目中已经包含这些库，请确保版本兼容。建议使用与SDK相同的版本以避免兼容性问题。
+
+2. **AAR文件依赖**：SDK内部依赖的AAR文件（位于SDK的libs目录）不会被打包到SDK的AAR中，需要主项目自行提供这些AAR文件作为依赖。请将SDK libs目录下的所有AAR文件复制到主项目的libs目录，并在build.gradle中添加依赖。
 
 ### 2. 初始化SDK
 
@@ -446,6 +465,208 @@ fileService.downloadFile(
     outputPath = "/path/to/output.jpg"
 )
 ```
+
+## 重要流程说明
+
+### 表盘信息获取流程
+
+**重要**：上传图片/视频前，必须先获取设备的表盘信息。表盘信息包含设备屏幕尺寸、屏幕类型等关键参数，这些信息是文件转换和传输所必需的。
+
+#### 1. 自动获取表盘信息
+
+SDK会在设备连接成功后自动请求表盘信息：
+
+```kotlin
+// 设备连接成功后，SDK会自动请求表盘信息
+bluetoothService.setConnectionCallback(object : ConnectionCallback {
+    override fun onConnected(deviceInfo: DeviceInfo) {
+        // 设备已连接，SDK会自动请求表盘信息
+        // 通常需要等待3-5秒后表盘信息才会获取完成
+        Log.d("App", "设备已连接，等待表盘信息...")
+    }
+})
+```
+
+#### 2. 检查表盘信息是否已获取
+
+在上传文件前，需要检查表盘信息是否已获取：
+
+```kotlin
+val clockDialInfoService = BajiSDK.getInstance().getClockDialInfoService()
+
+// 检查表盘信息是否存在
+if (clockDialInfoService.hasClockDialInfo()) {
+    // 表盘信息已获取，可以上传文件
+    val clockDialInfo = clockDialInfoService.getCurrentClockDialInfo()
+    Log.d("App", "表盘信息: ${clockDialInfo?.width}x${clockDialInfo?.height}")
+    
+    // 开始上传文件
+    fileService.uploadFile(filePath, FileInfo.FileType.IMAGE)
+} else {
+    // 表盘信息未获取，需要等待或手动请求
+    Log.w("App", "表盘信息未获取，请等待或手动请求")
+}
+```
+
+#### 3. 手动请求表盘信息
+
+如果自动获取失败，可以手动请求：
+
+```kotlin
+val clockDialInfoService = BajiSDK.getInstance().getClockDialInfoService()
+
+// 手动请求表盘信息
+clockDialInfoService.requestClockDialInfo()
+
+// 等待一段时间后检查（建议等待3-5秒）
+Handler(Looper.getMainLooper()).postDelayed({
+    if (clockDialInfoService.hasClockDialInfo()) {
+        Log.d("App", "表盘信息获取成功")
+        // 可以开始上传文件
+    } else {
+        Log.e("App", "表盘信息获取失败，请检查设备连接状态")
+    }
+}, 5000)
+```
+
+#### 4. 完整的文件上传流程
+
+```kotlin
+// 1. 检查设备连接状态
+val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+if (!bluetoothService.isConnected()) {
+    Toast.makeText(context, "请先连接设备", Toast.LENGTH_SHORT).show()
+    return
+}
+
+// 2. 检查表盘信息是否已获取
+val clockDialInfoService = BajiSDK.getInstance().getClockDialInfoService()
+if (!clockDialInfoService.hasClockDialInfo()) {
+    // 表盘信息未获取，先请求
+    clockDialInfoService.requestClockDialInfo()
+    
+    // 等待表盘信息获取完成
+    Handler(Looper.getMainLooper()).postDelayed({
+        if (clockDialInfoService.hasClockDialInfo()) {
+            // 表盘信息已获取，继续后续流程
+            proceedWithFileUpload()
+        } else {
+            Toast.makeText(context, "表盘信息获取失败，请重新连接设备", Toast.LENGTH_SHORT).show()
+        }
+    }, 5000)
+} else {
+    // 表盘信息已获取，直接继续
+    proceedWithFileUpload()
+}
+
+fun proceedWithFileUpload() {
+    // 3. 转换图片/视频（需要表盘信息中的屏幕尺寸）
+    val clockDialInfo = clockDialInfoService.getCurrentClockDialInfo()
+    val targetWidth = clockDialInfo?.width ?: 240
+    val targetHeight = clockDialInfo?.height ?: 240
+    
+    // 转换图片
+    val imageService = BajiSDK.getInstance().getImageConvertService()
+    val imageParams = ImageConvertParams(
+        targetWidth = targetWidth,
+        targetHeight = targetHeight,
+        quality = 90,
+        outputFormat = ImageConvertParams.ImageFormat.BIN,
+        algorithm = clockDialInfo?.algorithm ?: 0
+    )
+    
+    imageService.convertImage(
+        inputPath = "/path/to/original.jpg",
+        outputPath = "/path/to/converted.bin",
+        params = imageParams
+    )
+    
+    // 4. 上传转换后的文件
+    val fileService = BajiSDK.getInstance().getFileTransferService()
+    fileService.uploadFile(
+        filePath = "/path/to/converted.bin",
+        fileType = FileInfo.FileType.IMAGE
+    )
+}
+```
+
+#### 5. 监听表盘信息获取事件
+
+可以通过EventBus监听表盘信息获取完成事件：
+
+```kotlin
+@Subscribe(threadMode = ThreadMode.MAIN)
+fun onClockDialInfoEvent(event: ClockDialInfoEvent) {
+    if (event.body != null) {
+        val clockDialInfo = event.body
+        Log.d("App", "表盘信息获取成功: ${clockDialInfo.width}x${clockDialInfo.height}")
+        // 表盘信息已获取，可以开始上传文件
+        proceedWithFileUpload()
+    } else {
+        Log.e("App", "表盘信息获取失败")
+    }
+}
+```
+
+### 图片/视频转换流程
+
+图片和视频转换需要使用表盘信息中的屏幕尺寸参数：
+
+```kotlin
+// 1. 获取表盘信息
+val clockDialInfoService = BajiSDK.getInstance().getClockDialInfoService()
+val clockDialInfo = clockDialInfoService.getCurrentClockDialInfo()
+
+if (clockDialInfo == null) {
+    Toast.makeText(context, "请先连接设备并获取表盘信息", Toast.LENGTH_SHORT).show()
+    return
+}
+
+// 2. 使用表盘信息中的屏幕尺寸进行转换
+val targetWidth = clockDialInfo.width
+val targetHeight = clockDialInfo.height
+val screenType = clockDialInfo.screenType // 0=方屏，1=圆屏
+val algorithm = clockDialInfo.algorithm
+
+// 3. 转换图片
+val imageParams = ImageConvertParams(
+    targetWidth = targetWidth,
+    targetHeight = targetHeight,
+    quality = 90,
+    outputFormat = ImageConvertParams.ImageFormat.BIN,
+    algorithm = algorithm
+)
+
+imageService.convertImage(
+    inputPath = "/path/to/input.jpg",
+    outputPath = "/path/to/output.bin",
+    params = imageParams
+)
+
+// 4. 转换视频
+val videoParams = VideoConvertParams(
+    targetWidth = targetWidth,
+    targetHeight = targetHeight,
+    fps = 5,
+    quality = 3
+)
+
+videoService.convertToAVI(
+    inputPath = "/path/to/input.mp4",
+    outputPath = "/path/to/output.avi",
+    params = videoParams
+)
+```
+
+### 流程总结
+
+1. **连接设备** → 2. **等待表盘信息自动获取**（或手动请求）→ 3. **检查表盘信息是否存在** → 4. **转换文件（使用表盘信息中的尺寸）** → 5. **上传文件**
+
+**注意事项**：
+- 表盘信息获取通常需要3-5秒，请耐心等待
+- 如果表盘信息获取失败，请检查设备连接状态并重新连接
+- 上传文件前必须确保表盘信息已获取，否则会失败
+- 图片/视频转换需要使用表盘信息中的屏幕尺寸，确保转换后的文件适配设备屏幕
 
 ## 权限要求
 
