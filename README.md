@@ -65,12 +65,25 @@ allprojects {
 ```gradle
 dependencies {
     // 通过JitPack引入SDK（推荐，无需认证）
-    implementation 'com.github.yougaohui:baji-sdk:v1.0.0'
+    implementation 'com.github.yougaohui:baji-sdk:v1.0.5'
+    
+    // 【重要】必须添加以下本地依赖（SDK依赖的底层库）
+    // 请将SDK demo/libs目录下的所有aar/jar文件复制到您的libs目录
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
 }
 ```
 
+**⚠️ 重要提示：依赖底层库**
+
+由于SDK依赖多个本地AAR文件（如蓝牙协议、OTA库等），这些文件无法通过Maven传递。**您必须手动集成这些库**：
+
+1. 下载本仓库源码或Demo
+2. 复制 `demo/libs` (或 `sdk/libs`) 目录下的所有 `.aar` 和 `.jar` 文件
+3. 粘贴到您项目的 `libs` 目录
+4. 确保 `build.gradle` 中有 `implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])`
+
 **版本说明**：
-- 使用Release标签：`v1.0.0`、`v1.0.1` 等
+- 使用Release标签：`v1.0.5`
 - 使用分支：`-SNAPSHOT`（如 `master-SNAPSHOT`）
 - 使用提交哈希：`abc1234`（前7位）
 
