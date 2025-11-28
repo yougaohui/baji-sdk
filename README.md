@@ -304,6 +304,8 @@ private val scanCallback = object : ScanCallback() {
 
 ### 5. 使用视频转换服务
 
+**注意**：设备仅支持播放 **AVI** 格式的视频。SDK 提供了将 MP4 等格式转换为设备专用 AVI 格式的功能。同时提供了 AVI 转 MP4/GIF 的辅助功能，用于在手机端预览。
+
 ```kotlin
 val videoService = BajiSDK.getInstance().getVideoConvertService()
 
