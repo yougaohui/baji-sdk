@@ -1,7 +1,9 @@
 jdk:
   - openjdk17
 before_install:
-  - ./gradlew clean
+  - ./gradlew :sdk:clean
 build:
-  - ./gradlew :sdk:assembleRelease :sdk:generatePomFileForReleasePublication
+  - ./gradlew :sdk:assembleRelease :sdk:generatePomFileForReleasePublication -x :demo:build
+install:
+  - ./gradlew :sdk:publishToMavenLocal -x :demo:build
 
