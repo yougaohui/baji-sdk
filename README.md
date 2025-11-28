@@ -6,6 +6,7 @@
 
 - [开发文档](docs/DEVELOPMENT.md) - 完整的API参考和使用指南
 - [使用示例](EXAMPLE.md) - 快速开始示例代码
+- [Demo下载](https://www.pgyer.com/dianzibajisdkdemo) - 下载Android Demo体验功能
 
 ## 功能特性
 
