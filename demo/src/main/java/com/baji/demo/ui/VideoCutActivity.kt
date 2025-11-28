@@ -58,6 +58,7 @@ class VideoCutActivity : AppCompatActivity() {
     private var mAdapter: FramesAdapter? = null
     private var mMinTime = 0L // 默认从0s开始
     private var mMaxTime = MAX_TIME * 1000L // 默认到5s结束
+    private var mFirstPosition = 0 // RecyclerView第一个可见项的位置
     private var timer: Timer? = null
     private var timerTaskImp: TimerTaskImp? = null
     private var loadingDialog: AlertDialog? = null
@@ -70,6 +71,7 @@ class VideoCutActivity : AppCompatActivity() {
     // 视频帧相关
     private var mFrames = 0 // 视频帧数（秒数）
     private val frameList = ArrayList<String>() // 存储每一帧的路径
+    private var mActualVideoDurationSeconds = 0.0 // 视频实际时长（秒）
 
     // 视频原始尺寸
     private var mVideoOriginalWidth = 0
@@ -102,12 +104,28 @@ class VideoCutActivity : AppCompatActivity() {
         mRecyclerView.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         mRecyclerView.adapter = mAdapter
 
-        // 根据RangeSeekBarView的宽度计算每一帧的宽度
-        mRangeSeekBarView.post {
-            val width = mRangeSeekBarView.width / MAX_TIME
-            mAdapter?.setItemWidth(width) // 根据seekbar的长度除以最大帧数，就是我们每一帧需要的宽度
-            Log.d(TAG, "设置帧宽度: $width (RangeSeekBarView宽度: ${mRangeSeekBarView.width}, MAX_TIME: $MAX_TIME)")
-        }
+        // 添加滚动监听器，根据滚动位置更新时间范围
+        mRecyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                val layoutManager = recyclerView.layoutManager as? LinearLayoutManager
+                layoutManager?.let {
+                    mFirstPosition = it.findFirstVisibleItemPosition()
+                    Log.d(TAG, "RecyclerView滚动，第一个可见项位置: $mFirstPosition")
+                    
+                    // 根据滚动位置更新时间范围
+                    val minValue = mRangeSeekBarView.getSelectedMinValue()
+                    val maxValue = mRangeSeekBarView.getSelectedMaxValue()
+                    mMinTime = minValue + mFirstPosition * 1000L
+                    mMaxTime = maxValue + mFirstPosition * 1000L
+                    mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+                    mRangeSeekBarView.invalidate()
+                    reStartVideo()
+                }
+            }
+        })
+
+        // 注意：每一帧的宽度将在知道实际视频帧数后计算（在analysisVideo中）
 
         mTvOk.setOnClickListener {
             trimVideo()
@@ -279,6 +297,15 @@ class VideoCutActivity : AppCompatActivity() {
         mRangeSeekBarView.setSelectedMinValue(mMinTime)
         mRangeSeekBarView.setSelectedMaxValue(mMaxTime)
         mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+        mRangeSeekBarView.setNotifyWhileDragging(true)
+        mRangeSeekBarView.setOnRangeSeekBarChangeListener { bar, minValue, maxValue, action, isMin, pressedThumb ->
+            Log.d(TAG, "RangeSeekBar拖动: minValue=$minValue, maxValue=$maxValue, mFirstPosition=$mFirstPosition")
+            // 根据第一个可见项的位置调整时间范围
+            mMinTime = minValue + mFirstPosition * 1000L
+            mMaxTime = maxValue + mFirstPosition * 1000L
+            mRangeSeekBarView.setStartEndTime(mMinTime, mMaxTime)
+            reStartVideo()
+        }
     }
 
     private fun startTimer() {
@@ -351,17 +378,37 @@ class VideoCutActivity : AppCompatActivity() {
             }
 
             val duration = mp!!.duration
-            mFrames = duration / 1000 // 转换为秒数
-            if (mFrames > MAX_TIME) {
-                mFrames = MAX_TIME // 最多提取5秒的帧
-            }
+            mActualVideoDurationSeconds = duration / 1000.0
+            
+            // 计算实际需要的帧数：向上取整，但不超过MAX_TIME
+            // 例如：4.1秒 -> 5帧，5秒 -> 5帧，3.2秒 -> 4帧
+            mFrames = Math.ceil(mActualVideoDurationSeconds).toInt().coerceAtMost(MAX_TIME)
+            
+            Log.d(TAG, "视频总时长: ${duration}ms (${mActualVideoDurationSeconds}秒), 提取帧数: $mFrames")
 
-            Log.d(TAG, "视频总时长: ${duration}ms, 帧数: $mFrames")
-
-            // 如果帧数小于1，不进行提取
-            if (mFrames < 1) {
+            // 如果视频时长小于1秒，不进行提取
+            if (mActualVideoDurationSeconds < 1.0) {
                 Log.w(TAG, "视频时长太短，无法提取帧")
                 return
+            }
+
+            // 根据实际帧数计算每一帧的宽度，确保所有预览帧能填满整个宽度并可以滚动
+            // 使用RangeSeekBarView的宽度来计算，确保内容总宽度足够滚动
+            mRangeSeekBarView.post {
+                val seekBarWidth = mRangeSeekBarView.width
+                val recyclerViewWidth = mRecyclerView.width
+                val recyclerViewPadding = mRecyclerView.paddingLeft + mRecyclerView.paddingRight
+                val visibleWidth = recyclerViewWidth - recyclerViewPadding
+                
+                // 计算每帧宽度：使用RangeSeekBarView的完整宽度除以实际帧数
+                // 这样总内容宽度 = mFrames * (seekBarWidth / mFrames) = seekBarWidth
+                // 由于RecyclerView有padding，实际可见区域更小，所以内容宽度大于可见宽度，可以滚动
+                val width = seekBarWidth / mFrames
+                mAdapter?.setItemWidth(width)
+                
+                val totalContentWidth = width * mFrames
+                
+                Log.d(TAG, "设置帧宽度: $width (RangeSeekBarView宽度: $seekBarWidth, RecyclerView宽度: $recyclerViewWidth, 可见宽度: $visibleWidth, 总内容宽度: $totalContentWidth, 实际帧数: $mFrames)")
             }
 
             // 确保输出目录存在
@@ -403,11 +450,19 @@ class VideoCutActivity : AppCompatActivity() {
         // 获取表盘信息并计算帧尺寸
         val frameSize = getFrameSizeFromClockDialInfo()
 
+        // 如果请求的时间超过视频实际时长，使用视频最后一秒的时间
+        // 这样可以确保即使视频时长不足，也能提取到最后一帧
+        val actualTime = if (time >= mActualVideoDurationSeconds) {
+            Math.max(0.0, mActualVideoDurationSeconds - 0.1) // 使用视频最后一秒，稍微提前一点确保能提取到
+        } else {
+            time.toDouble()
+        }
+
         // 构建FFmpeg命令字符串
-        val command = "-y -ss $time -i \"$inputPath\" -frames:v 1 -f image2 -s $frameSize \"$outfile\""
+        val command = "-y -ss $actualTime -i \"$inputPath\" -frames:v 1 -f image2 -s $frameSize \"$outfile\""
         val nextTime = time + 1
 
-        Log.d(TAG, "提取第 $time 秒的帧，命令: $command")
+        Log.d(TAG, "提取第 $time 秒的帧（实际时间: $actualTime 秒），命令: $command")
 
         // 检查Activity是否还在运行
         if (isFinishing || isDestroyed) {
@@ -435,6 +490,8 @@ class VideoCutActivity : AppCompatActivity() {
                                 frameList.add(outfile)
                             }
                             mAdapter?.updateList(frameList)
+                            // 通知所有item更新宽度（因为宽度可能在列表更新后才设置）
+                            mAdapter?.notifyDataSetChanged()
                         } else {
                             // 更新指定位置的帧
                             if (time < frameList.size) {

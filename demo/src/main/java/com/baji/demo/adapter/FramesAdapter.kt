@@ -31,11 +31,17 @@ class FramesAdapter : RecyclerView.Adapter<FramesAdapter.ViewHolder>() {
                 .load(list[position])
                 .into(holder.mIv)
             
-            val layoutParams = holder.mIv.layoutParams
-            layoutParams.width = mWidth
-            holder.mIv.layoutParams = layoutParams
+            // 设置 ImageView 的宽度
+            val imageLayoutParams = holder.mIv.layoutParams
+            imageLayoutParams.width = mWidth
+            holder.mIv.layoutParams = imageLayoutParams
             
-            Log.d("FramesAdapter", "onBindViewHolder: position=$position, total=${itemCount}")
+            // 设置 itemView 的宽度，确保每个 item 的宽度一致
+            val itemLayoutParams = holder.itemView.layoutParams
+            itemLayoutParams.width = mWidth
+            holder.itemView.layoutParams = itemLayoutParams
+            
+            Log.d("FramesAdapter", "onBindViewHolder: position=$position, total=${itemCount}, itemWidth=$mWidth")
         }
     }
 
