@@ -88,50 +88,7 @@ dependencies {
 - 使用分支：`-SNAPSHOT`（如 `master-SNAPSHOT`）
 - 使用提交哈希：`abc1234`（前7位）
 
-#### 方式二：通过GitHub Packages
-
-在项目根目录的 `build.gradle` 或 `settings.gradle` 中添加GitHub Packages仓库：
-
-```gradle
-repositories {
-    maven {
-        name = "GitHubPackages"
-        url = uri("https://maven.pkg.github.com/yougaohui/baji-sdk")
-        credentials {
-            username = project.findProperty("gpr.user") ?: System.getenv("GITHUB_USERNAME")
-            password = project.findProperty("gpr.token") ?: System.getenv("GITHUB_TOKEN")
-        }
-    }
-}
-```
-
-**配置GitHub认证**：
-
-1. 创建GitHub Personal Access Token：
-   - 前往 GitHub Settings > Developer settings > Personal access tokens > Tokens (classic)
-   - 生成新token，勾选 `write:packages` 和 `read:packages` 权限
-
-2. 配置认证（推荐使用环境变量）：
-   ```bash
-   # Windows (PowerShell)
-   $env:GITHUB_USERNAME="yougaohui"
-   $env:GITHUB_TOKEN="your_github_token"
-   
-   # Linux/Mac
-   export GITHUB_USERNAME=yougaohui
-   export GITHUB_TOKEN=your_github_token
-   ```
-
-在您的项目 `build.gradle` 中添加依赖：
-
-```gradle
-dependencies {
-    // 通过GitHub Packages引入SDK
-    implementation 'com.baji:sdk:1.0.0'
-}
-```
-
-#### 方式三：使用本地AAR文件
+#### 方式二：使用本地AAR文件
 
 如果您不想使用Maven仓库，也可以直接使用AAR文件：
 
