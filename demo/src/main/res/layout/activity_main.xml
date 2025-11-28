@@ -82,5 +82,39 @@
         android:visibility="gone"
         android:layout_marginTop="8dp" />
 
+    <!-- 设备管理功能区域 -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="设备管理"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:layout_marginTop="16dp"
+        android:layout_marginBottom="8dp" />
+
+    <Button
+        android:id="@+id/findDeviceButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/find_device"
+        android:layout_marginBottom="8dp"
+        android:enabled="false" />
+
+    <Button
+        android:id="@+id/factoryResetButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/factory_reset"
+        android:layout_marginBottom="8dp"
+        android:enabled="false" />
+
+    <Button
+        android:id="@+id/unbindDeviceButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/unbind_device"
+        android:layout_marginBottom="8dp"
+        android:enabled="false" />
+
 </LinearLayout>
 

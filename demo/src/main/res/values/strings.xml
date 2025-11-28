@@ -18,5 +18,15 @@
     <string name="sync_success">同步成功</string>
     <string name="sync_failed">同步失败</string>
     <string name="sync_progress">同步进度: %1$d%%</string>
+    <string name="find_device">寻找设备</string>
+    <string name="factory_reset">恢复出厂设置</string>
+    <string name="unbind_device">解绑设备</string>
+    <string name="confirm_factory_reset">确定要恢复出厂设置吗？此操作不可恢复。</string>
+    <string name="confirm_unbind">确定要解绑设备吗？</string>
+    <string name="ok">确定</string>
+    <string name="cancel">取消</string>
+    <string name="unbinding">解绑中...</string>
+    <string name="unbind_success">解绑成功</string>
+    <string name="unbind_failed">解绑失败: %1$s</string>
 </resources>
 

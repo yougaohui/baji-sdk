@@ -10,6 +10,7 @@
 ## 功能特性
 
 - ✅ **蓝牙连接**: 设备扫描、连接、断开、状态监听
+- ✅ **设备管理**: 寻找设备、恢复出厂设置、解绑设备
 - ✅ **OTA升级**: 检查升级、启动升级流程、升级状态监听
 - ✅ **视频转换**: 视频转AVI、AVI转MP4、AVI转GIF等格式转换
 - ✅ **图片转换**: 图片格式转换、缩放、裁剪，支持转换为设备专用格式
@@ -110,17 +111,93 @@ bluetoothService.setConnectionCallback(object : ConnectionCallback {
     }
 })
 
-// 开始扫描
-bluetoothService.startScan()
-
 // 连接设备
 bluetoothService.connectDevice("AA:BB:CC:DD:EE:FF")
 
 // 断开连接
 bluetoothService.disconnectDevice()
+
+// 检查连接状态
+val isConnected = bluetoothService.isConnected()
+
+// 获取当前连接的设备
+val device = bluetoothService.getConnectedDevice()
 ```
 
-### 4. 使用视频转换服务
+### 3.1 设备管理功能
+
+```kotlin
+val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+
+// 寻找设备（让已连接的设备发出提示，如响铃或震动）
+// 注意：需要设备已连接
+try {
+    bluetoothService.findDevice()
+    Toast.makeText(context, "已发送寻找设备指令", Toast.LENGTH_SHORT).show()
+} catch (e: IllegalStateException) {
+    Toast.makeText(context, "设备未连接", Toast.LENGTH_SHORT).show()
+}
+
+// 恢复出厂设置（重置设备到出厂状态）
+// 注意：需要设备已连接，此操作不可恢复
+try {
+    bluetoothService.factoryReset()
+    Toast.makeText(context, "已发送恢复出厂设置指令", Toast.LENGTH_SHORT).show()
+} catch (e: IllegalStateException) {
+    Toast.makeText(context, "设备未连接", Toast.LENGTH_SHORT).show()
+}
+
+// 解绑设备（解绑当前设备，清除本地存储的设备信息）
+// 支持设备已连接和未连接两种情况
+bluetoothService.unbindDevice { success, error ->
+    if (success) {
+        Log.d("App", "解绑成功")
+        // 解绑成功后的处理，如更新UI、清空设备列表等
+    } else {
+        Log.e("App", "解绑失败: $error")
+        // 解绑失败的处理
+    }
+}
+```
+
+### 4. 设备扫描（主项目自行实现）
+
+蓝牙设备扫描功能不在SDK中，需要主项目自行实现。可以参考demo中的实现方式：
+
+```kotlin
+// 使用Android系统的BluetoothLeScanner进行扫描
+val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+val bluetoothAdapter = bluetoothManager.adapter
+val bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
+
+// 开始扫描
+val scanSettings = ScanSettings.Builder()
+    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+    .build()
+val scanFilters = emptyList<ScanFilter>()
+bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
+
+// 扫描结果处理
+private val scanCallback = object : ScanCallback() {
+    override fun onScanResult(callbackType: Int, result: ScanResult) {
+        // 使用SDK的过滤工具检查是否为电子吧唧设备
+        val manufacturerData = result.scanRecord?.manufacturerSpecificData
+        if (BluetoothFilterUtil.isValidBajiDevice(manufacturerData, result.device.name)) {
+            // 转换为DeviceInfo并通过SDK回调通知
+            val deviceInfo = DeviceInfo(
+                name = result.device.name ?: "Unknown",
+                macAddress = result.device.address,
+                isConnected = false,
+                rssi = result.rssi
+            )
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+            bluetoothService.onDeviceFound(deviceInfo)
+        }
+    }
+}
+```
+
+### 5. 使用视频转换服务
 
 ```kotlin
 val videoService = BajiSDK.getInstance().getVideoConvertService()
@@ -170,7 +247,7 @@ videoService.convertAVIToGIF(
 )
 ```
 
-### 5. 使用图片转换服务
+### 6. 使用图片转换服务
 
 ```kotlin
 val imageService = BajiSDK.getInstance().getImageConvertService()
@@ -201,7 +278,7 @@ imageService.convertImage(
 )
 ```
 
-### 6. 使用OTA升级服务
+### 7. 使用OTA升级服务
 
 ```kotlin
 val otaService = BajiSDK.getInstance().getOTAService()
@@ -232,7 +309,7 @@ otaService.checkUpgrade()
 otaService.startUpgrade("/path/to/ota/file.bin")
 ```
 
-### 7. 使用文件传输服务
+### 8. 使用文件传输服务
 
 ```kotlin
 val fileService = BajiSDK.getInstance().getFileTransferService()

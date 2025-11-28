@@ -304,6 +304,29 @@ class MainActivity : AppCompatActivity() {
             videoSyncViewModel.startPictureSelectorForVideo(this)
         }
         
+        // 寻找设备按钮
+        binding.findDeviceButton.setOnClickListener {
+            if (connectedDevice == null) {
+                Toast.makeText(this, "请先连接设备", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            findDevice()
+        }
+        
+        // 恢复出厂设置按钮
+        binding.factoryResetButton.setOnClickListener {
+            if (connectedDevice == null) {
+                Toast.makeText(this, "请先连接设备", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            showFactoryResetDialog()
+        }
+        
+        // 解绑设备按钮
+        binding.unbindDeviceButton.setOnClickListener {
+            showUnbindDeviceDialog()
+        }
+        
         updateConnectionStatus(false)
     }
     
@@ -546,11 +569,108 @@ class MainActivity : AppCompatActivity() {
             binding.connectionStatus.setTextColor(getColor(android.R.color.holo_green_dark))
             binding.syncImageButton.isEnabled = true
             binding.syncVideoButton.isEnabled = true
+            binding.findDeviceButton.isEnabled = true
+            binding.factoryResetButton.isEnabled = true
+            binding.unbindDeviceButton.isEnabled = true
         } else {
             binding.connectionStatus.text = getString(R.string.disconnected)
             binding.connectionStatus.setTextColor(getColor(android.R.color.holo_red_dark))
             binding.syncImageButton.isEnabled = false
             binding.syncVideoButton.isEnabled = false
+            binding.findDeviceButton.isEnabled = false
+            binding.factoryResetButton.isEnabled = false
+            binding.unbindDeviceButton.isEnabled = true // 解绑按钮在未连接时也可以使用（本地解绑）
+        }
+    }
+    
+    /**
+     * 寻找设备
+     */
+    private fun findDevice() {
+        try {
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+            bluetoothService.findDevice()
+            Toast.makeText(this, "已发送寻找设备指令", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "寻找设备失败: ${e.message}", e)
+            Toast.makeText(this, "寻找设备失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * 显示恢复出厂设置确认对话框
+     */
+    private fun showFactoryResetDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.factory_reset))
+            .setMessage(getString(R.string.confirm_factory_reset))
+            .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                factoryReset()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    /**
+     * 恢复出厂设置
+     */
+    private fun factoryReset() {
+        try {
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+            bluetoothService.factoryReset()
+            Toast.makeText(this, "已发送恢复出厂设置指令", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e(TAG, "恢复出厂设置失败: ${e.message}", e)
+            Toast.makeText(this, "恢复出厂设置失败: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    /**
+     * 显示解绑设备确认对话框
+     */
+    private fun showUnbindDeviceDialog() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(getString(R.string.unbind_device))
+            .setMessage(getString(R.string.confirm_unbind))
+            .setPositiveButton(getString(R.string.ok)) { _, _ ->
+                unbindDevice()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    /**
+     * 解绑设备
+     */
+    private fun unbindDevice() {
+        try {
+            val bluetoothService = BajiSDK.getInstance().getBluetoothService()
+            
+            // 显示解绑中提示
+            Toast.makeText(this, getString(R.string.unbinding), Toast.LENGTH_SHORT).show()
+            
+            bluetoothService.unbindDevice { success, error ->
+                runOnUiThread {
+                    if (success) {
+                        Toast.makeText(this@MainActivity, getString(R.string.unbind_success), Toast.LENGTH_SHORT).show()
+                        // 更新连接状态
+                        connectedDevice = null
+                        updateConnectionStatus(false)
+                        // 清空设备列表
+                        deviceList.clear()
+                        deviceAdapter.notifyDataSetChanged()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.unbind_failed, error ?: "未知错误"),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "解绑设备失败: ${e.message}", e)
+            Toast.makeText(this, "解绑设备失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
     
